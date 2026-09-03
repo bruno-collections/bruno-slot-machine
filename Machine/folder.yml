@@ -1,0 +1,30 @@
+info:
+  name: Machine
+  type: folder
+  seq: 1
+
+docs:
+  content: |-
+    ## Machine
+
+    The two requests behind the booth game, both against
+    [random.org](https://www.random.org) - true randomness from atmospheric
+    noise, no key and no signup.
+
+    | Request | Verb | What for |
+    |---|---|---|
+    | Spin Reels | GET | One spin: three integers, one per reel |
+    | Check RNG Quota | GET | Pre-flight: bits left today |
+
+    `Spin Reels` is the interesting one: `num=3` integers in `[0, maxStop]`,
+    returned as `text/plain`, one per line. The app reads those three
+    numbers as the three reel stops - there is no client-side dice anywhere
+    in the game, which is the whole point of putting it on the booth screen.
+
+    Both run fine on their own from the sidebar; the environment carries a
+    stand-in `maxStop` for what the app supplies at runtime.
+
+    ```bash
+    bru run "Machine" --env Booth
+    ```
+  type: text/markdown

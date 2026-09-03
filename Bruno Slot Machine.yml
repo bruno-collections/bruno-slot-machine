@@ -1,0 +1,1716 @@
+info:
+  name: Bruno Slot Machine
+  type: app
+  seq: 1
+code: |-
+  <!DOCTYPE html>
+  <html lang="en">
+  <head>
+  <meta charset="utf-8" />
+  <title>Bruno Slot Machine</title>
+  <style>
+    :root {
+      --bg: #0c0a08;
+      --panel: #17130e;
+      --border: #2e261c;
+      --text: #f7f1e7;
+      --muted: #9d8f7c;
+      --accent: #f4aa41;
+      --accent-hot: #ffc46b;
+      --accent-dark: #d98324;
+      --danger: #ff6b5e;
+      --good: #7ee081;
+      --banner-h: clamp(54px, 6.5vh, 84px);
+      --cell: clamp(78px, 13.5vh, 176px);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      background:
+        radial-gradient(1400px 900px at 50% -20%, #221a10 0%, var(--bg) 55%),
+        var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      overflow: hidden;
+      height: 100vh;
+    }
+    /* The booth screen is always the dark cabinet, whichever theme Bruno is in. */
+    body.dark, body.light { background-color: var(--bg); color: var(--text); }
+
+    .screen {
+      position: absolute;
+      inset: var(--banner-h) 0 64px 0;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 1.6vh 2.4vw;
+      text-align: center;
+      animation: screenIn 380ms ease both;
+    }
+    .screen.active { display: flex; }
+    @keyframes screenIn {
+      from { opacity: 0; transform: scale(0.985); }
+      to   { opacity: 1; transform: scale(1); }
+    }
+
+    /* ------- attract banner ------- */
+    /* Read from across the aisle: this is what pulls people to the booth in the
+       first place, so it outranks everything else on the screen. */
+    #banner {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: var(--banner-h);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.7em;
+      background: linear-gradient(
+        90deg,
+        var(--accent-dark),
+        var(--accent) 35%,
+        var(--accent-hot) 50%,
+        var(--accent) 65%,
+        var(--accent-dark)
+      );
+      color: #221302;
+      font-size: clamp(17px, 2vw, 38px);
+      font-weight: 900;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      overflow: hidden;
+      z-index: 25;
+      box-shadow: 0 6px 44px rgba(244, 170, 65, 0.4);
+    }
+    /* A slow sweep of light, so the banner reads as live rather than printed. */
+    #banner::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 26%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+      animation: sheen 5s linear infinite;
+    }
+    @keyframes sheen {
+      from { left: -28%; }
+      to   { left: 100%; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #banner::after { display: none; }
+    }
+
+    .kicker {
+      font-size: clamp(13px, 1.2vw, 20px);
+      letter-spacing: 0.45em;
+      color: var(--accent);
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+    .mega { font-weight: 900; letter-spacing: 0.01em; line-height: 0.95; }
+
+    /* ------- loading / fatal ------- */
+    #screen-loading .mega { font-size: clamp(40px, 5vw, 80px); color: var(--muted); }
+    #screen-fatal .box {
+      max-width: 1100px;
+      background: var(--panel);
+      border: 2px solid var(--danger);
+      border-radius: 18px;
+      padding: 44px 52px;
+    }
+    #screen-fatal h1 { color: var(--danger); font-size: clamp(34px, 3.8vw, 60px); margin-bottom: 18px; }
+    #screen-fatal p { color: var(--text); font-size: clamp(17px, 1.5vw, 26px); line-height: 1.5; white-space: pre-wrap; }
+
+    /* ------- machine ------- */
+    #screen-machine { justify-content: center; gap: 2.2vh; }
+    .machine-wrap {
+      display: flex;
+      align-items: stretch;
+      justify-content: center;
+      gap: 2.4vw;
+      width: 100%;
+      min-height: 0;
+    }
+
+    /* The cabinet: three reels behind one window, with a lit payline. */
+    .cabinet {
+      position: relative;
+      background: linear-gradient(180deg, #1d1710, #120e0a);
+      border: 3px solid var(--accent-dark);
+      border-radius: 26px;
+      padding: clamp(10px, 1.4vh, 22px);
+      box-shadow: 0 0 90px rgba(244, 170, 65, 0.22), inset 0 0 60px rgba(0, 0, 0, 0.6);
+    }
+    .reels {
+      position: relative;
+      display: flex;
+      gap: clamp(8px, 0.9vw, 18px);
+      height: calc(var(--cell) * 3);
+      overflow: hidden;
+      border-radius: 16px;
+    }
+    .reel {
+      position: relative;
+      /* Narrower as reels are added, so five or six still fit the cabinet. */
+      width: clamp(62px, calc(58vw / var(--reels, 3)), 190px);
+      height: 100%;
+      overflow: hidden;
+      background: #0a0806;
+      border-radius: 14px;
+      /* An inset shadow rather than a border: a border would push the strip
+         down inside the reel while the payline is positioned against the
+         window, and the reels would land a couple of pixels off-centre. */
+      box-shadow: inset 0 0 0 2px var(--border);
+    }
+    /* Glass: darkens the rows above and below so the payline row pops. */
+    .reel::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: linear-gradient(
+        180deg,
+        rgba(4, 3, 2, 0.92) 0%,
+        rgba(4, 3, 2, 0.42) 22%,
+        rgba(4, 3, 2, 0) 44%,
+        rgba(4, 3, 2, 0) 56%,
+        rgba(4, 3, 2, 0.42) 78%,
+        rgba(4, 3, 2, 0.92) 100%
+      );
+    }
+    .strip { will-change: transform; }
+    .strip.spinning { filter: blur(1.6px); }
+    /* The free-running spin. One iteration travels exactly one copy of the
+       strip, and every copy is identical, so the loop is seamless. Both ends
+       are set from script as custom properties, because where a reel starts
+       depends on where the last spin parked it. */
+    @keyframes reelLoop {
+      from { transform: translateY(var(--loop-from, 0px)); }
+      to   { transform: translateY(var(--loop-to, 0px)); }
+    }
+    .cell {
+      height: var(--cell);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: calc(var(--cell) * 0.56);
+      line-height: 1;
+      user-select: none;
+    }
+    /* Word marks ("200", "GET", "{ }") need to come down to emoji weight. */
+    .cell.word {
+      font-size: calc(var(--cell) * 0.3);
+      font-weight: 900;
+      letter-spacing: 0.02em;
+      color: var(--accent);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    .payline {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: var(--cell);
+      height: var(--cell);
+      border-top: 2px solid rgba(244, 170, 65, 0.55);
+      border-bottom: 2px solid rgba(244, 170, 65, 0.55);
+      pointer-events: none;
+      z-index: 3;
+    }
+    .payline.win {
+      border-color: var(--accent-hot);
+      box-shadow: 0 0 50px rgba(244, 170, 65, 0.75), inset 0 0 60px rgba(244, 170, 65, 0.22);
+    }
+    @keyframes cabinetWin {
+      0%, 100% { box-shadow: 0 0 90px rgba(244, 170, 65, 0.25), inset 0 0 60px rgba(0, 0, 0, 0.6); }
+      50%      { box-shadow: 0 0 150px rgba(244, 170, 65, 0.7), inset 0 0 60px rgba(0, 0, 0, 0.6); }
+    }
+    .cabinet.win { animation: cabinetWin 900ms ease-in-out 3; }
+
+    /* ------- how to win ------- */
+    .rules {
+      background: var(--panel);
+      border: 2px solid var(--border);
+      border-radius: 20px;
+      padding: clamp(10px, 1.4vh, 20px) clamp(12px, 1.2vw, 24px);
+      text-align: left;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      min-width: min(26vw, 420px);
+      text-align: center;
+    }
+    .rules h2 {
+      font-size: clamp(12px, 1.05vw, 19px);
+      letter-spacing: 0.3em;
+      color: var(--muted);
+      font-weight: 800;
+    }
+    /* The whole game in one line: this many of this symbol, and you win. */
+    .rules .combo {
+      font-size: clamp(30px, 4vw, 76px);
+      line-height: 1;
+      letter-spacing: 0.06em;
+      margin: 0.35em 0 0.2em;
+    }
+    .rules .combo.word {
+      font-size: clamp(16px, 1.9vw, 34px);
+      font-weight: 900;
+      color: var(--accent);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    /* More than one prize turns the card into a short paytable: a row per
+       tier, richest first, small enough that three still fit. */
+    .rules.multi .tier {
+      display: flex;
+      align-items: center;
+      gap: 0.8vw;
+      padding: 0.5em 0;
+      border-bottom: 1px solid rgba(46, 38, 28, 0.8);
+      text-align: left;
+    }
+    .rules.multi .tier:last-child { border-bottom: 0; }
+    .rules.multi .combo {
+      font-size: clamp(17px, 2vw, 38px);
+      margin: 0;
+      white-space: nowrap;
+    }
+    .rules.multi .combo.word { font-size: clamp(12px, 1.2vw, 22px); }
+    .rules.multi .prize-name {
+      font-size: clamp(13px, 1.25vw, 24px);
+      margin-top: 0;
+      margin-left: auto;
+      text-align: right;
+    }
+    .rules.multi .tier:first-child .prize-name { color: var(--accent-hot); }
+    .rules .combo .any {
+      font-size: 0.42em;
+      font-weight: 900;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+      vertical-align: middle;
+    }
+    .rules .rule {
+      font-size: clamp(11px, 1vw, 18px);
+      letter-spacing: 0.22em;
+      color: var(--muted);
+      font-weight: 800;
+    }
+    .rules .prize-name {
+      font-size: clamp(17px, 1.9vw, 36px);
+      font-weight: 900;
+      letter-spacing: 0.1em;
+      color: var(--accent);
+      margin-top: 0.5em;
+      line-height: 1.05;
+    }
+
+    .stats {
+      display: flex;
+      gap: 1.4vw;
+      margin-top: 3vh;
+      padding-top: 1.4vh;
+      justify-content: space-between;
+      text-align: center;
+    }
+    .stat { flex: 1; }
+    .stat .n {
+      font-size: clamp(18px, 2vw, 38px);
+      font-weight: 900;
+      color: var(--accent);
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+    }
+    .stat .l {
+      font-size: clamp(9px, 0.78vw, 14px);
+      letter-spacing: 0.22em;
+      color: var(--muted);
+      font-weight: 800;
+      margin-top: 0.35em;
+    }
+
+    /* ------- result ------- */
+    .result {
+      min-height: 13vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5vh;
+    }
+    .result .status {
+      font-size: clamp(13px, 1.2vw, 22px);
+      letter-spacing: 0.35em;
+      font-weight: 800;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+    .result .prize {
+      font-size: clamp(30px, 4.6vw, 88px);
+      font-weight: 900;
+      line-height: 1;
+      letter-spacing: 0.01em;
+      color: var(--accent);
+      text-shadow: 0 0 46px rgba(244, 170, 65, 0.4);
+    }
+    .result.miss .prize { color: var(--muted); text-shadow: none; font-size: clamp(24px, 3vw, 54px); }
+    .result .hint {
+      font-size: clamp(12px, 1.15vw, 22px);
+      letter-spacing: 0.24em;
+      color: var(--text);
+      font-weight: 800;
+      opacity: 0;
+      transition: opacity 300ms ease;
+    }
+    .result .hint.show { opacity: 1; }
+    .result.miss .hint { color: var(--accent); }
+
+    /* ------- controls ------- */
+    .controls {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    button {
+      font-family: inherit;
+      background: var(--panel);
+      color: var(--text);
+      border: 2px solid var(--border);
+      border-radius: 14px;
+      font-size: clamp(13px, 1.1vw, 20px);
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      padding: 0.6em 1.2em;
+      cursor: pointer;
+      transition: border-color 150ms ease, background 150ms ease, opacity 150ms ease;
+    }
+    button:hover { border-color: var(--accent); }
+    button:disabled { opacity: 0.32; cursor: default; }
+    button.primary {
+      background: linear-gradient(180deg, var(--accent), var(--accent-dark));
+      color: #221302;
+      border-color: var(--accent-dark);
+      font-size: clamp(22px, 2.6vw, 48px);
+      padding: 0.5em 2.2em;
+      border-radius: 18px;
+      box-shadow: 0 8px 40px rgba(244, 170, 65, 0.35);
+    }
+    button.primary:hover { background: linear-gradient(180deg, var(--accent-hot), var(--accent)); }
+    button.primary:disabled { box-shadow: none; }
+    button.danger { border-color: #6b2a24; color: var(--danger); }
+    button.danger:hover { border-color: var(--danger); }
+    .spin-hint {
+      font-size: clamp(10px, 0.85vw, 15px);
+      letter-spacing: 0.28em;
+      color: var(--muted);
+      font-weight: 800;
+    }
+
+    /* ------- footer ------- */
+    #footer {
+      position: absolute;
+      left: 0; right: 0; bottom: 0;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 0 28px;
+      border-top: 1px solid var(--border);
+      background: rgba(12, 10, 8, 0.9);
+      font-size: clamp(12px, 1vw, 18px);
+      letter-spacing: 0.12em;
+      z-index: 30;
+    }
+    #footer .brand { color: var(--accent); font-weight: 900; letter-spacing: 0.3em; white-space: nowrap; }
+    #footer .api {
+      color: var(--muted);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    #footer .api .ok { color: var(--good); }
+    #footer .api .bad { color: var(--danger); }
+    #footer .right { display: flex; gap: 10px; align-items: center; }
+    #footer button { font-size: 13px; padding: 0.5em 1em; border-radius: 10px; }
+    .rng-badge {
+      font-size: clamp(10px, 0.85vw, 15px);
+      font-weight: 900;
+      letter-spacing: 0.2em;
+      color: var(--good);
+      border: 2px solid #2c5730;
+      border-radius: 999px;
+      padding: 0.3em 0.9em;
+      white-space: nowrap;
+    }
+    .rng-badge.local { color: var(--accent); border-color: var(--accent-dark); }
+
+    /* ------- overlays ------- */
+    .overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(8, 6, 4, 0.88);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 40;
+    }
+    .overlay.active { display: flex; }
+    .overlay .panel {
+      background: var(--panel);
+      border: 2px solid var(--accent-dark);
+      border-radius: 22px;
+      padding: 36px 48px;
+      max-width: 1200px;
+      max-height: 82vh;
+      overflow: auto;
+      text-align: center;
+    }
+    #api-overlay h2 { color: var(--accent); font-size: clamp(22px, 2.2vw, 40px); letter-spacing: 0.25em; margin-bottom: 20px; }
+    #api-overlay pre {
+      text-align: left;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: clamp(14px, 1.3vw, 24px);
+      line-height: 1.55;
+      color: var(--text);
+      white-space: pre-wrap;
+    }
+    #api-overlay .map {
+      display: flex;
+      gap: 1.4vw;
+      justify-content: center;
+      margin-top: 22px;
+      flex-wrap: wrap;
+    }
+    #api-overlay .map .m {
+      border: 2px solid var(--border);
+      border-radius: 14px;
+      padding: 0.5em 1em;
+      min-width: 8em;
+    }
+    #api-overlay .map .m .stop {
+      font-size: clamp(20px, 2.2vw, 40px);
+      font-weight: 900;
+      color: var(--accent);
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+    }
+    #api-overlay .map .m .arrow { color: var(--muted); font-size: clamp(11px, 1vw, 17px); margin: 0.3em 0; letter-spacing: 0.2em; }
+    #api-overlay .map .m .sym { font-size: clamp(20px, 2.2vw, 40px); line-height: 1; }
+    #api-overlay .verdict { margin-top: 22px; font-size: clamp(16px, 1.6vw, 30px); font-weight: 900; color: var(--good); }
+    #api-overlay .note { margin-top: 10px; font-size: clamp(12px, 1.1vw, 20px); color: var(--muted); letter-spacing: 0.1em; }
+
+    #error-banner {
+      position: absolute;
+      top: calc(var(--banner-h) + 20px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: #2a120f;
+      border: 2px solid var(--danger);
+      border-radius: 16px;
+      padding: 16px 32px;
+      z-index: 50;
+      display: none;
+      text-align: center;
+      max-width: 80vw;
+    }
+    #error-banner.active { display: block; }
+    #error-banner .t { color: var(--danger); font-weight: 900; font-size: clamp(17px, 1.7vw, 30px); letter-spacing: 0.15em; }
+    #error-banner .d { color: var(--text); margin-top: 6px; font-size: clamp(13px, 1.15vw, 21px); white-space: pre-line; }
+    #error-banner .controls { margin-top: 12px; }
+    #error-banner button { font-size: 13px; padding: 0.5em 1.2em; }
+
+    /* width/height must be explicit: <canvas> is a replaced element, so an
+       absolutely positioned one with left/right:0 keeps its intrinsic 300x150
+       and pins itself to the corner instead of stretching. */
+    #confetti {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 20;
+    }
+  </style>
+  </head>
+  <body>
+
+  <div id="banner">SPIN TO WIN A BRUNO T-SHIRT</div>
+
+  <canvas id="confetti"></canvas>
+
+  <section id="screen-loading" class="screen active">
+    <p class="kicker">BRUNO BOOTH</p>
+    <h1 class="mega" id="loading-msg">LOADING…</h1>
+  </section>
+
+  <section id="screen-fatal" class="screen">
+    <div class="box">
+      <h1>CANNOT START</h1>
+      <p id="fatal-msg"></p>
+    </div>
+  </section>
+
+  <section id="screen-machine" class="screen">
+    <div class="machine-wrap">
+      <div class="cabinet" id="cabinet">
+        <div class="reels" id="reels">
+          <div class="payline" id="payline"></div>
+        </div>
+      </div>
+
+      <div class="rules single" id="rules">
+        <h2>HOW TO WIN</h2>
+        <div id="rule-rows"></div>
+        <div class="stats">
+          <div class="stat"><div class="n" id="stat-spins">0</div><div class="l">SPINS</div></div>
+          <div class="stat"><div class="n" id="stat-wins">0</div><div class="l" id="stat-wins-label">SHIRTS WON</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="result" id="result">
+      <div class="status" id="result-status">PRESS SPIN</div>
+      <div class="prize" id="result-prize"></div>
+      <div class="hint" id="result-hint"></div>
+    </div>
+
+    <div class="controls">
+      <button id="btn-spin" class="primary">SPIN</button>
+      <span class="spin-hint">OR PRESS SPACE</span>
+    </div>
+  </section>
+
+  <div class="overlay" id="api-overlay">
+    <div class="panel">
+      <h2>THE REQUEST BRUNO JUST RAN</h2>
+      <pre id="api-detail"></pre>
+      <div class="map" id="api-map"></div>
+      <div class="verdict" id="api-verdict"></div>
+      <div class="note" id="api-note"></div>
+      <div class="controls"><button id="btn-api-dismiss">CLOSE</button></div>
+    </div>
+  </div>
+
+  <div id="error-banner">
+    <div class="t" id="error-title"></div>
+    <div class="d" id="error-detail"></div>
+    <div class="controls">
+      <button id="btn-error-retry">TRY AGAIN</button>
+      <button id="btn-error-local">SPIN WITH LOCAL RNG</button>
+      <button id="btn-error-dismiss">DISMISS</button>
+    </div>
+  </div>
+
+  <div id="footer">
+    <span class="brand">POWERED BY BRUNO</span>
+    <span class="api" id="footer-api">waiting for first request</span>
+    <span class="right">
+      <span class="rng-badge" id="rng-badge">TRUE RNG · RANDOM.ORG</span>
+      <button id="btn-show-api">SHOW API</button>
+      <button id="btn-reset" class="danger">RESET COUNTER</button>
+    </span>
+  </div>
+
+  <script>
+  (function () {
+    'use strict';
+
+    /* ------------------------------------------------------------------
+       Bruno requests this app drives. Names must match the collection.
+       ------------------------------------------------------------------ */
+    var REQ_SPIN = 'Spin Reels';
+    var REQUIRED = [REQ_SPIN];
+
+    /* ------------------------------------------------------------------
+       The machine, configured from the collection.
+
+       Everything a booth would want to retune lives in the environment: how
+       many reels, how long the strip, which symbols, how often it pays and
+       what it pays. Retuning the game is an edit in Bruno's environment
+       editor - or a --env-var on the CLI - not a change to this file.
+
+       Every setting falls back to the default beside it, so the app still
+       runs against an empty environment, and anything nonsensical is clamped
+       rather than obeyed: a booth game should never be one typo away from a
+       blank screen.
+
+       Real slot machines do not roll a symbol, they roll a *stop* on a
+       physical reel, and the symbol distribution on that reel sets the odds.
+       Same here: one virtual reel of STOPS stops, each symbol occupying as
+       many stops as its weight. Bruno asks random.org for one integer per
+       reel and those integers are the reel positions.
+       ------------------------------------------------------------------ */
+    var DEFAULTS = {
+      reelCount: 3,
+      maxStop: 63,                  // strip length is maxStop + 1
+      winSymbol: '🐶',
+      missSymbol: '⚡',
+      winMin: 2,
+      winRate: 0.5,
+      prizeName: 'BRUNO T-SHIRT',
+      prizeTiers: null,             // optional: { "3": "HOODIE", "2": "T-SHIRT" }
+      winHint: 'GRAB ONE FROM THE TABLE',
+      missHint: 'STILL GRAB SOME SWAG FROM THE TABLE!',
+      winsLabel: 'SHIRTS WON',
+      missText: 'NO LUCK — SPIN AGAIN',
+      nearMissText: 'SO CLOSE — SPIN AGAIN',
+      eventLabel: 'SPIN TO WIN A BRUNO T-SHIRT'
+    };
+
+    var MIN_REELS = 2, MAX_REELS = 6;
+    var MIN_STOPS = 8, MAX_STOPS = 256;
+    var WIN_KEY = 'win';
+
+    /* Everything below is rebuilt by applyConfig() whenever the environment
+       changes, so the rest of the app can go on reading plain variables. */
+    var REELS = DEFAULTS.reelCount;
+    var SYMBOLS = [];
+    var STRIP = [];
+    var STOPS = 0;
+    var TIERS = [];
+    var WIN_MIN = DEFAULTS.winMin;
+    var IDLE_STOPS = [];
+    var COPY = {};
+    var ACHIEVED_RATE = 0;
+
+    function readNumber(value, fallback) {
+      var n = Number(value);
+      return Number.isFinite(n) ? n : fallback;
+    }
+
+    function readText(value, fallback) {
+      var t = String(value == null ? '' : value).trim();
+      return t || fallback;
+    }
+
+    function clampInt(n, lo, hi) {
+      return Math.max(lo, Math.min(hi, Math.round(n)));
+    }
+
+    /* A glyph made only of ASCII - "200", "GET", "{ }" - is a word mark and
+       needs to come down to emoji weight to sit on the reel. */
+    function isWordGlyph(glyph) {
+      return glyph.length > 1 && /^[\x20-\x7E]+$/.test(glyph);
+    }
+
+    function symbol(key, glyph, weight) {
+      return { key: key, glyph: glyph, word: isWordGlyph(glyph), weight: weight };
+    }
+
+    /* The exact share of spins that pay, for a win symbol covering `p` of the
+       strip. Walks all 2^REELS outcomes, so it stays right if the reel count
+       or the match requirement changes. */
+    function chanceOf(p, winMin, reels) {
+      var total = 0;
+      var outcomes = 1 << reels;
+      for (var mask = 0; mask < outcomes; mask++) {
+        var hits = 0;
+        var probability = 1;
+        for (var r = 0; r < reels; r++) {
+          if (mask & (1 << r)) { hits++; probability *= p; }
+          else { probability *= (1 - p); }
+        }
+        if (hits >= winMin) total += probability;
+      }
+      return total;
+    }
+
+    /* Turn "half of all spins should win" into a number of stops. The win
+       rate rises monotonically with the win symbol's share of the strip, so
+       the closest whole number of stops is just the best of all of them -
+       no solver, and it cannot overshoot into a rate the strip cannot pay. */
+    function stopsForRate(target, stops, winMin, reels) {
+      var best = 0;
+      var bestGap = Infinity;
+      for (var w = 0; w <= stops; w++) {
+        var gap = Math.abs(chanceOf(w / stops, winMin, reels) - target);
+        if (gap < bestGap) { bestGap = gap; best = w; }
+      }
+      return best;
+    }
+
+    /* Prize tiers, richest first: { "3": "HOODIE", "2": "T-SHIRT" } or
+       [{ match: 3, prize: "HOODIE" }]. Falls back to the single prize. */
+    function readTiers(vars, reels, winMin, prizeName) {
+      var raw = vars.prizeTiers;
+      var parsed = null;
+      if (raw && typeof raw === 'object') {
+        parsed = raw;
+      } else if (typeof raw === 'string' && raw.trim()) {
+        try { parsed = JSON.parse(raw); } catch (e) { parsed = null; }
+      }
+
+      var tiers = [];
+      if (Array.isArray(parsed)) {
+        parsed.forEach(function (tier) {
+          if (tier) tiers.push({ match: Number(tier.match), prize: readText(tier.prize, '') });
+        });
+      } else if (parsed) {
+        Object.keys(parsed).forEach(function (key) {
+          tiers.push({ match: Number(key), prize: readText(parsed[key], '') });
+        });
+      }
+
+      tiers = tiers.filter(function (tier) {
+        return Number.isInteger(tier.match) && tier.match >= 1 && tier.match <= reels && tier.prize;
+      });
+
+      var seen = {};
+      tiers = tiers.filter(function (tier) {
+        if (seen[tier.match]) return false;
+        seen[tier.match] = true;
+        return true;
+      });
+      tiers.sort(function (a, b) { return b.match - a.match; });
+
+      return tiers.length ? tiers : [{ match: winMin, prize: prizeName }];
+    }
+
+    function readConfig() {
+      var vars = resolvedVars();
+
+      var reels = clampInt(readNumber(vars.reelCount, DEFAULTS.reelCount), MIN_REELS, MAX_REELS);
+      var stops = clampInt(readNumber(vars.maxStop, DEFAULTS.maxStop) + 1, MIN_STOPS, MAX_STOPS);
+      var winMin = clampInt(readNumber(vars.winMin, DEFAULTS.winMin), 1, reels);
+      var rate = Math.max(0, Math.min(1, readNumber(vars.winRate, DEFAULTS.winRate)));
+
+      var tiers = readTiers(vars, reels, winMin, readText(vars.prizeName, DEFAULTS.prizeName));
+      // The cheapest tier is what "winning" means, so that is the threshold
+      // the win rate has to hit.
+      var threshold = tiers[tiers.length - 1].match;
+      var winStops = stopsForRate(rate, stops, threshold, reels);
+
+      return {
+        reels: reels,
+        stops: stops,
+        winMin: threshold,
+        tiers: tiers,
+        symbols: [
+          symbol(WIN_KEY, readText(vars.winSymbol, DEFAULTS.winSymbol), winStops),
+          symbol('miss', readText(vars.missSymbol, DEFAULTS.missSymbol), stops - winStops)
+        ],
+        rate: chanceOf(winStops / stops, threshold, reels),
+        copy: {
+          eventLabel: readText(vars.eventLabel, DEFAULTS.eventLabel),
+          winHint: readText(vars.winHint, DEFAULTS.winHint),
+          missHint: readText(vars.missHint, DEFAULTS.missHint),
+          winsLabel: readText(vars.winsLabel, DEFAULTS.winsLabel),
+          missText: readText(vars.missText, DEFAULTS.missText),
+          nearMissText: readText(vars.nearMissText, DEFAULTS.nearMissText)
+        }
+      };
+    }
+
+    function configSignature(config) {
+      return JSON.stringify([
+        config.reels, config.stops, config.tiers, config.copy,
+        config.symbols.map(function (s) { return s.glyph + ':' + s.weight; })
+      ]);
+    }
+
+    /* Point the module-level machine at a freshly read configuration. */
+    function applyConfig(config) {
+      REELS = config.reels;
+      SYMBOLS = config.symbols;
+      STRIP = buildStrip(config.symbols);
+      STOPS = STRIP.length;
+      TIERS = config.tiers;
+      WIN_MIN = config.winMin;
+      COPY = config.copy;
+      ACHIEVED_RATE = config.rate;
+      IDLE_STOPS = pickIdleStops();
+    }
+
+    /* Where the reels sit before anyone has spun. Parking every reel on stop
+       0 could leave the machine showing a winning line that nobody won, so
+       find a resting line that does not pay. */
+    function pickIdleStops() {
+      var stops = [];
+      for (var r = 0; r < REELS; r++) stops.push(r % STOPS);
+      if (!evaluate(stops).win) return stops;
+      var miss = STRIP.findIndex ? STRIP.findIndex(function (s) { return s.key !== WIN_KEY; }) : -1;
+      if (miss < 0) {
+        for (var i = 0; i < STOPS; i++) {
+          if (STRIP[i].key !== WIN_KEY) { miss = i; break; }
+        }
+      }
+      if (miss < 0) return stops;          // a strip that is all win symbol
+      var resting = stops.slice();
+      for (var j = 0; j < REELS && evaluate(resting).win; j++) resting[j] = miss;
+      return resting;
+    }
+
+    /* Spread each symbol as evenly as it will go around the reel, the way a
+       real reel is laid out - no long block of one symbol to spin past, and
+       the stop counts still come out at exactly the weights. */
+    function buildStrip(symbols) {
+      var total = symbols.reduce(function (a, s) { return a + s.weight; }, 0);
+      var credit = symbols.map(function () { return 0; });
+      var out = [];
+      for (var i = 0; i < total; i++) {
+        var best = 0;
+        for (var j = 0; j < symbols.length; j++) credit[j] += symbols[j].weight;
+        for (var k = 0; k < symbols.length; k++) {
+          if (credit[k] > credit[best]) best = k;
+        }
+        out.push(symbols[best]);
+        credit[best] -= total;
+      }
+      return out;
+    }
+
+    var COPIES = 6;          // enough strip rendered to cover the longest spin
+
+    /* Reels settle left to right, each one turning a little longer than the
+       one before it. */
+    function landMs(reel) { return 1150 + reel * 375; }
+    var MIN_SPIN_MS = 900;   // reels keep turning at least this long
+    var LEDGER_KEY = 'bruno-slot-ledger-v1';
+
+    var S = {
+      req: {},
+      spinning: false,
+      configSignature: null,
+      reconfigurePending: false,
+      lastApi: null,     // most recent call of any kind - drives the footer
+      lastSpin: null,    // most recent spin - drives the SHOW API overlay
+      ledger: { spins: 0, wins: 0 },
+      cellPx: 0,
+      confettiRunning: false,
+      confettiStop: null
+    };
+
+    function $(id) { return document.getElementById(id); }
+    function delay(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+    var REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    /* ============ Bruno plumbing ============ */
+
+    function run(name, runtimeVariables) {
+      var summary = S.req[name];
+      if (!summary) return Promise.reject(new Error('Missing Bruno request: ' + name));
+      var options = runtimeVariables ? { runtimeVariables: runtimeVariables } : undefined;
+      return bru.ctx.runRequest(summary.pathname, options);
+    }
+
+    function failed(res) {
+      return !res || typeof res.status !== 'number' || res.status < 200 || res.status >= 300;
+    }
+
+    /* random.org answers in text/plain, so the body arrives as a string. */
+    function textOf(res) {
+      if (!res) return '';
+      var d = res.data;
+      if (typeof d === 'string') return d;
+      if (d == null) return '';
+      try { return JSON.stringify(d); } catch (e) { return String(d); }
+    }
+
+    function errorFrom(res) {
+      if (res && res.status === 503) return 'random.org is rate-limiting this booth (HTTP 503).';
+      if (res && res.status) return 'HTTP ' + res.status + ' ' + (res.statusText || '');
+      return 'No response from the request.';
+    }
+
+    function noteApi(method, path, res, extra) {
+      S.lastApi = {
+        method: method,
+        path: path,
+        status: res && res.status,
+        statusText: (res && res.statusText) || '',
+        duration: res && res.duration,
+        body: extra && extra.body,
+        raw: extra && extra.raw
+      };
+      renderFooterApi();
+    }
+
+    function renderFooterApi() {
+      var el = $('footer-api');
+      var a = S.lastApi;
+      if (!a) { el.textContent = 'waiting for first request'; return; }
+      el.textContent = '';
+      var call = document.createElement('span');
+      call.textContent = a.method + ' ' + a.path + '  ';
+      var status = document.createElement('span');
+      status.className = (a.status >= 200 && a.status < 300) ? 'ok' : 'bad';
+      var dur = typeof a.duration === 'number' ? ' · ' + Math.round(a.duration) + 'ms' : '';
+      status.textContent = (a.status || 'ERR') + ' ' + (a.statusText || '') + dur;
+      el.appendChild(call);
+      el.appendChild(status);
+    }
+
+    /* ============ errors ============ */
+
+    function fatal(message) {
+      setPhase('fatal');
+      $('fatal-msg').textContent = message;
+    }
+
+    function showError(title, detail, offerLocal) {
+      $('error-title').textContent = title;
+      $('error-detail').textContent = detail;
+      $('btn-error-local').style.display = offerLocal ? '' : 'none';
+      $('btn-error-retry').style.display = offerLocal ? '' : 'none';
+      $('error-banner').classList.add('active');
+    }
+
+    function hideError() { $('error-banner').classList.remove('active'); }
+
+    /* ============ screens ============ */
+
+    var SCREENS = ['loading', 'fatal', 'machine'];
+
+    function setPhase(phase) {
+      SCREENS.forEach(function (name) {
+        $('screen-' + name).classList.toggle('active', name === phase);
+      });
+    }
+
+    /* ============ how to win, on the wall ============ */
+
+    function winSymbol() {
+      return SYMBOLS.filter(function (s) { return s.key === WIN_KEY; })[0];
+    }
+
+    /* What players need is what to look for and what they get - not the
+       odds. The win rate is a property of the environment's winRate and is
+       deliberately nowhere on this screen. */
+    function renderRules() {
+      var sym = winSymbol();
+      var wrap = $('rule-rows');
+      var multi = TIERS.length > 1;
+
+      wrap.textContent = '';
+      $('rules').className = 'rules ' + (multi ? 'multi' : 'single');
+
+      TIERS.forEach(function (tier) {
+        var row = document.createElement('div');
+        row.className = 'tier';
+
+        var combo = document.createElement('div');
+        combo.className = 'combo' + (sym.word ? ' word' : '');
+        for (var i = 0; i < tier.match; i++) {
+          combo.appendChild(document.createTextNode(sym.glyph + ' '));
+        }
+        if (tier.match < REELS) {
+          var any = document.createElement('span');
+          any.className = 'any';
+          any.textContent = '+ ANY';
+          combo.appendChild(any);
+        }
+        row.appendChild(combo);
+
+        if (!multi) {
+          var caption = document.createElement('div');
+          caption.className = 'rule';
+          caption.textContent = 'ANY ' + tier.match + ' OF ' + REELS + ' REELS';
+          row.appendChild(caption);
+        }
+
+        var prize = document.createElement('div');
+        prize.className = 'prize-name';
+        prize.textContent = tier.prize;
+        row.appendChild(prize);
+
+        wrap.appendChild(row);
+      });
+    }
+
+    /* ============ reels ============ */
+
+    function cellPx() {
+      var probe = document.querySelector('#strip-0 .cell');
+      return probe ? probe.getBoundingClientRect().height : 0;
+    }
+
+    /* The cabinet is rebuilt rather than reused: reel count and strip length
+       are both configurable, so neither the number of reels nor what is on
+       them can be assumed to have survived a change of environment. */
+    function buildReels() {
+      var wrap = $('reels');
+      var payline = $('payline');
+
+      wrap.textContent = '';
+      wrap.style.setProperty('--reels', String(REELS));
+
+      for (var r = 0; r < REELS; r++) {
+        var reel = document.createElement('div');
+        reel.className = 'reel';
+
+        var strip = document.createElement('div');
+        strip.className = 'strip';
+        strip.id = 'strip-' + r;
+
+        for (var c = 0; c < COPIES; c++) {
+          for (var i = 0; i < STOPS; i++) {
+            var sym = STRIP[i];
+            var cell = document.createElement('div');
+            cell.className = 'cell' + (sym.word ? ' word' : '');
+            cell.textContent = sym.glyph;
+            strip.appendChild(cell);
+          }
+        }
+
+        reel.appendChild(strip);
+        wrap.appendChild(reel);
+      }
+
+      wrap.appendChild(payline);   // the lit line sits over the reels
+      layoutReels();
+    }
+
+    /* Park every reel on a valid resting position for its current cell size.
+       Called on load and on resize, because --cell is viewport-relative. */
+    function layoutReels() {
+      S.cellPx = cellPx();
+      for (var r = 0; r < REELS; r++) {
+        var stop = (S.lastSpin && S.lastSpin.stops) ? S.lastSpin.stops[r] : IDLE_STOPS[r];
+        var strip = $('strip-' + r);
+        strip.style.animation = 'none';
+        strip.style.transition = 'none';
+        setOffset(strip, restCell(stop));
+      }
+    }
+
+    /* ---- reel positions, in cells rather than pixels ----
+
+       The payline is the middle row of a three-row window, so putting cell
+       `k` on it means shifting the strip up by k-1 cells. Every offset is
+       handed to the browser as a multiple of --cell, which is the same value
+       the cell heights come from, so the arithmetic is done once at full
+       precision by the engine.
+
+       Measuring a cell in JS and multiplying it out instead looks equivalent
+       and is not: --cell is viewport-relative and lands on a fraction of a
+       pixel, and a rounding error of a hundredth of a pixel per cell is a
+       whole symbol out by the far end of a 384-cell strip. */
+
+    function cellOffset(cell) {
+      return 'calc(var(--cell) * ' + (1 - cell) + ')';
+    }
+
+    function setOffset(strip, cell) {
+      strip.style.transform = 'translateY(' + cellOffset(cell) + ')';
+    }
+
+    /* Reels rest on copy 1, which leaves a full copy of strip above them to
+       spin up through and several below to land into. */
+    function restCell(stop) {
+      return stop + STOPS;
+    }
+
+    /* Which cell is on the payline at pixel offset `y`. Only ever used to
+       decide how far a landing has to travel, so the measured cell height is
+       good enough here - it cannot put a reel off-centre. */
+    function cellAt(y) {
+      return S.cellPx ? 1 - y / S.cellPx : STOPS;
+    }
+
+    /* Land on `stop`, but never less than a full revolution away from where
+       the reel is now - otherwise a spin that happens to be near its target
+       stops dead instead of decelerating into it. */
+    function landCellFrom(y, stop) {
+      var current = cellAt(y);
+      var copies = 2;
+      var cell = stop + STOPS * copies;
+      while (cell < current + STOPS) {
+        copies += 1;
+        cell = stop + STOPS * copies;
+      }
+      return cell;
+    }
+
+    function stripLenPx() { return STOPS * S.cellPx; }
+
+    function currentY(el) {
+      var t = getComputedStyle(el).transform;
+      if (!t || t === 'none') return 0;
+      var m = t.match(/matrix\(([^)]+)\)/);
+      if (m) {
+        var parts = m[1].split(',');
+        return parseFloat(parts[5]) || 0;
+      }
+      var m3 = t.match(/matrix3d\(([^)]+)\)/);
+      if (m3) {
+        var p3 = m3[1].split(',');
+        return parseFloat(p3[13]) || 0;
+      }
+      return 0;
+    }
+
+    /* Free-running spin. The reels keep turning for as long as the request is
+       in flight, so the wait for real randomness *is* the suspense. */
+    function startReels() {
+      S.cellPx = cellPx();
+      for (var r = 0; r < REELS; r++) {
+        var strip = $('strip-' + r);
+        // Spin up from wherever the last spin parked this reel, so the first
+        // frame is continuous rather than a jump back to the top of the strip.
+        var stop = (S.lastSpin && S.lastSpin.stops) ? S.lastSpin.stops[r] : IDLE_STOPS[r];
+        var from = restCell(stop);
+        strip.style.transition = 'none';
+        setOffset(strip, from);
+        if (REDUCED) continue;
+        strip.style.setProperty('--loop-from', cellOffset(from));
+        strip.style.setProperty('--loop-to', cellOffset(from + STOPS));
+        strip.style.animation = 'reelLoop ' + (0.42 + r * 0.05) + 's linear infinite';
+        strip.classList.add('spinning');
+      }
+    }
+
+    /* Land reel `r` on `stop`, decelerating from wherever the loop is now. */
+    function landReel(r, stop) {
+      var strip = $('strip-' + r);
+
+      if (REDUCED) {
+        strip.style.animation = 'none';
+        strip.style.transition = 'none';
+        strip.classList.remove('spinning');
+        setOffset(strip, restCell(stop));
+        return Promise.resolve();
+      }
+
+      var from = currentY(strip);
+      var target = landCellFrom(from, stop);
+      strip.style.animation = 'none';
+      strip.style.transition = 'none';
+      strip.style.transform = 'translateY(' + from + 'px)';
+      void strip.offsetHeight; // flush, so the transition below has a start value
+
+      return new Promise(function (resolve) {
+        var done = false;
+        function finish() {
+          if (done) return;
+          done = true;
+          strip.removeEventListener('transitionend', finish);
+          strip.classList.remove('spinning');
+          // Re-park on the equivalent resting position: same symbol on the
+          // payline, but with a full copy of strip left above it for the
+          // next spin to travel through.
+          strip.style.transition = 'none';
+          setOffset(strip, restCell(stop));
+          resolve();
+        }
+        var ms = landMs(r);
+        strip.addEventListener('transitionend', finish);
+        setTimeout(finish, ms + 260); // belt and braces if transitionend is missed
+        strip.style.transition = 'transform ' + ms + 'ms cubic-bezier(0.16, 0.82, 0.18, 1.02)';
+        setOffset(strip, target);
+        // The blur comes off just before the stop, so the landing reads sharp.
+        setTimeout(function () { strip.classList.remove('spinning'); }, Math.max(0, ms - 220));
+      });
+    }
+
+    function landAll(stops) {
+      return Promise.all(stops.map(function (stop, r) { return landReel(r, stop); }));
+    }
+
+    /* ============ outcome ============ */
+
+    function evaluate(stops) {
+      var syms = stops.map(function (s) { return STRIP[s]; });
+      var hits = syms.filter(function (s) { return s.key === WIN_KEY; }).length;
+      var tier = prizeFor(hits);
+      return {
+        syms: syms,
+        hits: hits,
+        win: !!tier,
+        prize: tier ? tier.prize : null,
+        label: hits + ' OF ' + REELS + ' ' + winSymbol().glyph
+      };
+    }
+
+    /* Richest tier the spin qualifies for, or nothing. */
+    function prizeFor(hits) {
+      for (var i = 0; i < TIERS.length; i++) {
+        if (hits >= TIERS[i].match) return TIERS[i];
+      }
+      return null;
+    }
+
+    /* ============ the spin ============ */
+
+    function parseStops(text) {
+      var nums = String(text).match(/-?\d+/g) || [];
+      // Exactly three numbers and nothing else: anything longer means the body
+      // is not the plain-integer response we asked for (an error page, say),
+      // and guessing which numbers were the reels would be worse than failing.
+      if (nums.length !== REELS) {
+        throw new Error('Expected ' + REELS + ' integers in the response, got ' + nums.length + '.');
+      }
+      var stops = nums.map(function (n) { return parseInt(n, 10); });
+      stops.forEach(function (s) {
+        if (!Number.isInteger(s) || s < 0 || s > STOPS - 1) {
+          throw new Error('Reel stop ' + s + ' is outside 0-' + (STOPS - 1) + '.');
+        }
+      });
+      return stops;
+    }
+
+    /* Fallback only, and always labelled as such on screen: a booth with dead
+       wifi should still be able to hand out swag, but nobody should be told
+       that random.org drew it when it did not. */
+    function localStops() {
+      // Rejection sampling, so the fallback stays unbiased even if someone
+      // retunes the weights into a stop count that is not a power of two.
+      var limit = Math.floor(4294967296 / STOPS) * STOPS;
+      var out = [];
+      while (out.length < REELS) {
+        var buf = new Uint32Array(REELS);
+        crypto.getRandomValues(buf);
+        for (var i = 0; i < buf.length && out.length < REELS; i++) {
+          if (buf[i] < limit) out.push(buf[i] % STOPS);
+        }
+      }
+      return out;
+    }
+
+    function spin(useLocal) {
+      if (S.spinning) return Promise.resolve();
+      S.spinning = true;
+      hideError();
+      stopConfetti();
+      setSpinEnabled(false);
+      $('payline').classList.remove('win');
+      $('cabinet').classList.remove('win');
+      $('result').className = 'result';
+      $('result-status').textContent = useLocal ? 'SPINNING · LOCAL RNG' : 'ASKING RANDOM.ORG FOR THREE NUMBERS…';
+      $('result-prize').textContent = '';
+      $('result-hint').textContent = '';
+      $('result-hint').classList.remove('show');
+
+      startReels();
+      var started = Date.now();
+
+      var source = useLocal
+        ? delay(650).then(function () {
+            return { stops: localStops(), rng: 'local', raw: null, res: null };
+          })
+        : run(REQ_SPIN, { maxStop: STOPS - 1, reelCount: REELS }).then(function (res) {
+            var raw = textOf(res);
+            noteApi('GET', '/integers?num=' + REELS + '&min=0&max=' + (STOPS - 1), res, { raw: raw });
+            if (failed(res)) throw new Error(errorFrom(res));
+            return { stops: parseStops(raw), rng: 'random.org', raw: raw, res: res };
+          });
+
+      return source
+        .then(function (draw) {
+          return delay(Math.max(0, MIN_SPIN_MS - (Date.now() - started))).then(function () { return draw; });
+        })
+        .then(function (draw) {
+          var outcome = evaluate(draw.stops);
+          S.lastSpin = {
+            stops: draw.stops,
+            rng: draw.rng,
+            raw: draw.raw,
+            status: draw.res && draw.res.status,
+            duration: draw.res && draw.res.duration,
+            outcome: outcome
+          };
+          setRngBadge(draw.rng);
+          return landAll(draw.stops).then(function () { return outcome; });
+        })
+        .then(function (outcome) {
+          S.spinning = false;
+          setSpinEnabled(true);
+          recordSpin(outcome);
+          showOutcome(outcome);
+          // An environment edited mid-spin is applied now that the reels
+          // have stopped, rather than being dropped.
+          if (S.reconfigurePending) {
+            S.reconfigurePending = false;
+            setTimeout(function () { reconfigure(true); }, 2600);
+          }
+        })
+        .catch(function (e) {
+          S.spinning = false;
+          setSpinEnabled(true);
+          S.reconfigurePending = false;
+          // Park the reels wherever they were, rather than freezing mid-blur.
+          layoutReels();
+          $('result').className = 'result miss';
+          $('result-status').textContent = 'NO SPIN';
+          $('result-prize').textContent = 'RNG UNAVAILABLE';
+          showError(
+            'COULD NOT REACH THE RNG',
+            e.message + '\nNobody spun, and nothing was won. Safe to try again.',
+            true
+          );
+        });
+    }
+
+    function setSpinEnabled(on) {
+      $('btn-spin').disabled = !on;
+      $('btn-spin').textContent = on ? 'SPIN' : 'SPINNING…';
+    }
+
+    function setRngBadge(rng) {
+      var badge = $('rng-badge');
+      if (rng === 'local') {
+        badge.className = 'rng-badge local';
+        badge.textContent = 'LOCAL CRYPTO RNG';
+      } else {
+        badge.className = 'rng-badge';
+        badge.textContent = 'TRUE RNG · RANDOM.ORG';
+      }
+    }
+
+    /* The winner is standing right there, so there is nothing to redeem
+       later: the screen says they won and someone hands them a shirt. */
+    function showOutcome(outcome) {
+      var result = $('result');
+      var hint = $('result-hint');
+
+      if (!outcome.win) {
+        result.className = 'result miss';
+        $('result-status').textContent = outcome.label;
+        $('result-prize').textContent =
+          outcome.hits === WIN_MIN - 1 ? COPY.nearMissText : COPY.missText;
+        // Nobody should walk away from the booth with nothing.
+        hint.textContent = COPY.missHint;
+        hint.classList.add('show');
+        return;
+      }
+
+      result.className = 'result';
+      $('payline').classList.add('win');
+      $('cabinet').classList.add('win');
+      $('result-status').textContent = 'WINNER';
+      $('result-prize').textContent = outcome.prize;
+      hint.textContent = COPY.winHint;
+      hint.classList.add('show');
+      startConfetti(true);
+    }
+
+    /* ============ ledger ============ */
+
+    function loadLedger() {
+      try {
+        var raw = localStorage.getItem(LEDGER_KEY);
+        if (raw) {
+          var parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === 'object') {
+            S.ledger.spins = parsed.spins || 0;
+            S.ledger.wins = parsed.wins || 0;
+          }
+        }
+      } catch (e) { /* private mode, or no storage in the webview - memory only */ }
+      renderLedger();
+    }
+
+    function saveLedger() {
+      try { localStorage.setItem(LEDGER_KEY, JSON.stringify(S.ledger)); } catch (e) {}
+    }
+
+    function recordSpin(outcome) {
+      S.ledger.spins += 1;
+      if (outcome.win) S.ledger.wins += 1;
+      saveLedger();
+      renderLedger();
+    }
+
+    function renderLedger() {
+      $('stat-spins').textContent = S.ledger.spins.toLocaleString();
+      $('stat-wins').textContent = S.ledger.wins.toLocaleString();
+    }
+
+    function resetLedger() {
+      S.ledger = { spins: 0, wins: 0 };
+      saveLedger();
+      renderLedger();
+    }
+
+    /* ============ SHOW API ============ */
+
+    function showApiOverlay() {
+      var spin = S.lastSpin;
+      var detail = $('api-detail');
+      var map = $('api-map');
+      map.textContent = '';
+
+      if (!spin) {
+        detail.textContent = 'No spin yet. Press SPIN and this shows the exact\nrequest Bruno ran and how its answer became the reels.';
+        $('api-verdict').textContent = '';
+        $('api-note').textContent = '';
+        $('api-overlay').classList.add('active');
+        return;
+      }
+
+      if (spin.rng === 'local') {
+        detail.textContent =
+          'No HTTP request — this spin used the local fallback.\n\n' +
+          'crypto.getRandomValues(new Uint32Array(3))  →  ' + spin.stops.join(', ') + '\n\n' +
+          'The booth screen said LOCAL CRYPTO RNG while it ran.';
+        $('api-verdict').textContent = 'FALLBACK RNG · NOT random.org';
+        $('api-verdict').style.color = 'var(--accent)';
+      } else {
+        var vars = resolvedVars();
+        var base = vars.rngBaseUrl || 'https://www.random.org';
+        detail.textContent =
+          'GET ' + base + '/integers/\n' +
+          '      ?num=' + REELS + '&min=0&max=' + (STOPS - 1) + '&col=1&base=10&format=plain&rnd=new\n\n' +
+          '→ ' + (spin.status || '') + ' in ' + (spin.duration != null ? Math.round(spin.duration) + 'ms' : '—') + ', text/plain:\n\n' +
+          String(spin.raw || '').trim();
+        $('api-verdict').textContent = 'THREE INTEGERS FROM ATMOSPHERIC NOISE';
+        $('api-verdict').style.color = 'var(--good)';
+      }
+
+      spin.stops.forEach(function (stop, i) {
+        var sym = STRIP[stop];
+        var m = document.createElement('div');
+        m.className = 'm';
+        var s = document.createElement('div');
+        s.className = 'stop';
+        s.textContent = stop;
+        m.appendChild(s);
+        var a = document.createElement('div');
+        a.className = 'arrow';
+        a.textContent = 'REEL ' + (i + 1);
+        m.appendChild(a);
+        var g = document.createElement('div');
+        g.className = 'sym' + (sym.word ? ' word' : '');
+        g.textContent = sym.glyph;
+        m.appendChild(g);
+        map.appendChild(m);
+      });
+
+      // The one place the odds are stated: this overlay is a presenter tool,
+      // and whoever set winRate needs to see what the strip actually pays.
+      $('api-note').textContent =
+        REELS + ' reels of ' + STOPS + ' stops (' +
+        SYMBOLS.map(function (s) { return s.glyph + ' ×' + s.weight; }).join(', ') + '). ' +
+        TIERS.map(function (t) { return t.match + '× ' + winSymbol().glyph + ' → ' + t.prize; }).join(', ') +
+        '. Pays on ' + Math.round(ACHIEVED_RATE * 100) + '% of spins, set from the environment.';
+
+      $('api-overlay').classList.add('active');
+    }
+
+    function hideApiOverlay() { $('api-overlay').classList.remove('active'); }
+
+    /* ============ confetti ============ */
+
+    function startConfetti(big) {
+      if (S.confettiRunning) return;
+      S.confettiRunning = true;
+
+      var canvas = $('confetti');
+      var ctx = canvas.getContext('2d');
+      var colors = ['#f4aa41', '#ffc46b', '#d98324', '#fdf8ef', '#7ee081'];
+      var w = 0;
+      var h = 0;
+
+      // Keep the bitmap in step with the CSS box and the display density, so
+      // pieces stay crisp on a projector and land where they are drawn.
+      function resize() {
+        var dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+        w = canvas.clientWidth || window.innerWidth;
+        h = canvas.clientHeight || window.innerHeight;
+        canvas.width = Math.round(w * dpr);
+        canvas.height = Math.round(h * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // from here on, draw in CSS pixels
+      }
+      resize();
+      window.addEventListener('resize', resize);
+
+      var count = Math.max(120, Math.min(360, Math.round(w / (big ? 4 : 7))));
+      var parts = [];
+      for (var i = 0; i < count; i++) {
+        parts.push({
+          x: Math.random() * w,
+          y: Math.random() * h * 1.4 - h * 0.9,
+          w: 5 + Math.random() * 9,
+          h: 8 + Math.random() * 12,
+          vy: 90 + Math.random() * 170,   // px per second, not per frame
+          vx: -30 + Math.random() * 60,
+          sway: 12 + Math.random() * 26,
+          swayRate: 0.8 + Math.random() * 1.6,
+          phase: Math.random() * Math.PI * 2,
+          rot: Math.random() * Math.PI,
+          vr: -2.4 + Math.random() * 4.8,
+          color: colors[Math.floor(Math.random() * colors.length)]
+        });
+      }
+
+      var DURATION = big ? 9000 : 5000;
+      var RESPAWN_UNTIL = big ? 6000 : 2600;
+      var FADE_MS = 1200;
+      var startedAt = performance.now();
+      var lastFrame = startedAt;
+      var raf = null;
+
+      function cleanup() {
+        if (raf) cancelAnimationFrame(raf);
+        raf = null;
+        ctx.clearRect(0, 0, w, h);
+        window.removeEventListener('resize', resize);
+        S.confettiRunning = false;
+        S.confettiStop = null;
+      }
+      S.confettiStop = cleanup;
+
+      if (REDUCED) { cleanup(); return; }
+
+      function frame(now) {
+        var elapsed = now - startedAt;
+        var dt = Math.min(0.05, (now - lastFrame) / 1000);
+        lastFrame = now;
+
+        ctx.clearRect(0, 0, w, h);
+        ctx.globalAlpha = elapsed > DURATION - FADE_MS
+          ? Math.max(0, (DURATION - elapsed) / FADE_MS)
+          : 1;
+
+        parts.forEach(function (p) {
+          p.phase += p.swayRate * dt;
+          p.x += (p.vx + Math.sin(p.phase) * p.sway) * dt;
+          p.y += p.vy * dt;
+          p.rot += p.vr * dt;
+
+          if (p.y > h + 30) {
+            if (elapsed < RESPAWN_UNTIL) {
+              p.y = -30;
+              p.x = Math.random() * w;
+            } else {
+              return;
+            }
+          }
+
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.rot);
+          ctx.fillStyle = p.color;
+          ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+          ctx.restore();
+        });
+
+        if (elapsed < DURATION) {
+          raf = requestAnimationFrame(frame);
+        } else {
+          cleanup();
+        }
+      }
+      raf = requestAnimationFrame(frame);
+    }
+
+    function stopConfetti() {
+      if (S.confettiStop) S.confettiStop();
+    }
+
+    /* ============ variables ============ */
+
+    function resolvedVars() {
+      return (bru.ctx.variables && bru.ctx.variables.resolved) || {};
+    }
+
+    /* Read the environment and rebuild whatever it changed. Called once at
+       startup and again every time the environment is edited, so retuning
+       the machine at the booth takes effect without restarting the app. */
+    function reconfigure(force) {
+      if (S.spinning) {            // never rebuild a machine mid-spin
+        S.reconfigurePending = true;
+        return;
+      }
+      var config = readConfig();
+      var signature = configSignature(config);
+      if (!force && signature === S.configSignature) return;
+      S.configSignature = signature;
+
+      applyConfig(config);
+      $('banner').textContent = COPY.eventLabel;
+      $('stat-wins-label').textContent = COPY.winsLabel;
+      renderRules();
+
+      // Stops from the previous strip mean nothing on the new one.
+      S.lastSpin = null;
+      buildReels();
+      resetResult();
+    }
+
+    function resetResult() {
+      $('result').className = 'result';
+      $('result-status').textContent = 'PRESS SPIN';
+      $('result-prize').textContent = '';
+      $('result-hint').textContent = '';
+      $('result-hint').classList.remove('show');
+      $('payline').classList.remove('win');
+      $('cabinet').classList.remove('win');
+      stopConfetti();
+    }
+
+    /* ============ init ============ */
+
+    function wireEvents() {
+      $('btn-spin').addEventListener('click', function () { spin(false); });
+      $('btn-show-api').addEventListener('click', showApiOverlay);
+      $('btn-api-dismiss').addEventListener('click', hideApiOverlay);
+      $('btn-reset').addEventListener('click', resetLedger);
+      $('btn-error-dismiss').addEventListener('click', hideError);
+      $('btn-error-retry').addEventListener('click', function () { spin(false); });
+      $('btn-error-local').addEventListener('click', function () { spin(true); });
+
+      // A wireless presenter clicker sends SPACE - that is the booth's lever.
+      document.addEventListener('keydown', function (e) {
+        if (e.code === 'Space' || e.key === ' ') {
+          if ($('api-overlay').classList.contains('active')) return;
+          e.preventDefault();
+          if (!S.spinning) spin(false);
+        }
+        if (e.key === 'Escape') { hideApiOverlay(); hideError(); }
+      });
+
+      var resizeTimer = null;
+      window.addEventListener('resize', function () {
+        if (S.spinning) return;
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(layoutReels, 120);
+      });
+    }
+
+    function init() {
+      wireEvents();
+      loadLedger();
+
+      bru.ctx.listRequests().then(function (requests) {
+        [REQ_SPIN].forEach(function (name) {
+          var found = requests.filter(function (r) {
+            var n = String(r.name || '');
+            return n === name || n.replace(/^\d+[-\s]*/, '') === name;
+          })[0];
+          if (found) S.req[name] = found;
+        });
+        var missing = REQUIRED.filter(function (name) { return !S.req[name]; });
+        if (missing.length > 0) {
+          fatal('Missing Bruno request(s):\n\n' + missing.join('\n') +
+            '\n\nThe Bruno Slot Machine app needs these requests in this collection. ' +
+            'Check that the Machine folder contains them and the names match.');
+          return;
+        }
+        setPhase('machine');
+        reconfigure(true);
+      }).catch(function (e) {
+        fatal('Could not initialize: ' + e.message);
+      });
+    }
+
+    /* Bruno populates ctx asynchronously; onInit fires once when it is ready. */
+    if (window.bru && bru.ctx) {
+      bru.ctx.onInit = function () { init(); };
+      bru.ctx.onVariablesChange = function () { reconfigure(false); };
+    } else {
+      document.addEventListener('DOMContentLoaded', function () {
+        $('loading-msg').textContent = 'BRUNO CONTEXT NOT FOUND';
+      });
+    }
+  })();
+  </script>
+  </body>
+  </html>

@@ -1,0 +1,48 @@
+name: Booth-Tiered
+color: "#C77DFF"
+variables:
+  - name: rngBaseUrl
+    value: https://www.random.org
+    description: True randomness from atmospheric noise - no key, no signup
+  - name: reelCount
+    value:
+      type: number
+      data: "3"
+    description: How many reels (2-6)
+  - name: maxStop
+    value:
+      type: number
+      data: "63"
+    description: Last stop on each reel, so 63 means a 64-stop strip
+  - name: winRate
+    value:
+      type: number
+      data: "0.5"
+    description: Half of all spins still win something - the tiers only change what
+  - name: prizeTiers
+    value:
+      type: object
+      data: |-
+        {
+          "2": "BRUNO STICKER PACK ",
+          "3": "BRUNO T-SHIRT"
+        }
+    description: "Two prizes from the same spin: all three reels wins the hoodie, two wins the shirt. The cheapest tier is what winRate targets, so the hoodie is simply the rarer half of those wins"
+  - name: winSymbol
+    value: 🐶
+    description: The symbol players are hunting
+  - name: missSymbol
+    value: ⚡
+    description: The other symbol on the reel
+  - name: eventLabel
+    value: SPIN TO WIN BRUNO SWAG
+    description: Banner - the prize is no longer just the shirt
+  - name: winHint
+    value: COME AND CLAIM IT
+    description: Line under a win
+  - name: missHint
+    value: STILL GRAB SOME SWAG FROM THE TABLE!
+    description: Line under a loss
+  - name: winsLabel
+    value: PRIZES WON
+    description: Label under the running count - not everything won here is a shirt

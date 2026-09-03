@@ -1,0 +1,68 @@
+info:
+  name: Check RNG Quota
+  type: http
+  seq: 2
+  tags:
+    - smoke
+
+http:
+  method: GET
+  url: "{{rngBaseUrl}}/quota/?format=plain"
+  params:
+    - name: format
+      value: plain
+      type: query
+      description: text/plain, so the body is a single number
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        const bits = Number(String(res.getBody() == null ? '' : res.getBody()).trim());
+
+        test("status is 200", () => {
+          expect(res.getStatus()).to.equal(200);
+        });
+
+        test("body is a bit count", () => {
+          expect(Number.isInteger(bits), `parsed "${bits}"`).to.equal(true);
+        });
+
+        test("the booth has true random bits left today", () => {
+          // random.org meters free use per IP and refills daily. Negative
+          // means this IP is out until midnight UTC, and every spin would
+          // fall back to local RNG - worth knowing before the doors open,
+          // not halfway through a demo.
+          expect(bits).to.be.above(0);
+        });
+
+        console.log('True random bits left today:', bits.toLocaleString());
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+
+settings:
+  encodeUrl: true
+  timeout: 10000
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true
+
+docs: |
+  Booth pre-flight. How many true random bits random.org will still hand
+  this IP today, as a single plain-text number:
+
+  ```
+  999982
+  ```
+
+  The free allowance is 1,000,000 bits per IP per day, topped back up at
+  midnight UTC. A spin costs a few dozen bits, so the practical answer is
+  "the booth will never run out" - but run this before the doors open
+  anyway, because conference wifi means a lot of laptops sharing one
+  public IP.
+
+  The app shows this figure under **TRUE RNG BITS LEFT** and refreshes it
+  from the **RNG QUOTA** button. If it ever goes negative, spins start
+  failing and the app offers the clearly-labelled local RNG fallback.

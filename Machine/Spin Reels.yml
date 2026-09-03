@@ -1,0 +1,225 @@
+info:
+  name: Spin Reels
+  type: http
+  seq: 1
+  tags:
+    - smoke
+
+http:
+  method: GET
+  url: "{{rngBaseUrl}}/integers/?num={{reelCount}}&min=0&max={{maxStop}}&col=1&base=10&format=plain&rnd=new"
+  params:
+    - name: num
+      value: "{{reelCount}}"
+      type: query
+      description: One integer per reel - the app sends its own reel count at runtime
+    - name: min
+      value: "0"
+      type: query
+      description: First stop on the reel strip
+    - name: max
+      value: "{{maxStop}}"
+      type: query
+      description: Last stop on the strip - the app sends its own strip length at runtime
+    - name: col
+      value: "1"
+      type: query
+      description: One number per line
+    - name: base
+      value: "10"
+      type: query
+      description: Decimal
+    - name: format
+      value: plain
+      type: query
+      description: text/plain, so the response is three lines and nothing else
+    - name: rnd
+      value: new
+      type: query
+      description: Draw fresh randomness rather than replaying a seed
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        const text = String(res.getBody() == null ? '' : res.getBody());
+        const stops = (text.match(/-?\d+/g) || []).map(Number);
+        const maxStop = Number(bru.getVar('maxStop') || bru.getEnvVar('maxStop') || 63);
+        const total = maxStop + 1;
+        const reelCount = Number(bru.getVar('reelCount') || bru.getEnvVar('reelCount') || 3);
+
+        const bars = stops
+          .map((stop, i) => {
+            const pct = total > 1 ? (stop / (total - 1)) * 100 : 0;
+            return `
+              <div class="reel">
+                <div class="head">
+                  <span class="label">REEL ${i + 1}</span>
+                  <span class="stop">${stop}<span class="of"> / ${maxStop}</span></span>
+                </div>
+                <div class="track"><div class="pip" style="left: ${pct}%"></div></div>
+              </div>`;
+          })
+          .join('');
+
+        const html = `
+          <style>
+            .wrap {
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+              background: #17130e;
+              color: #f7f1e7;
+              padding: 22px 24px;
+              border-radius: 14px;
+              max-width: 560px;
+              margin: 0 auto;
+            }
+            .title {
+              font-size: 12px;
+              letter-spacing: 0.28em;
+              color: #9d8f7c;
+              font-weight: 800;
+              text-transform: uppercase;
+              margin-bottom: 18px;
+            }
+            .reel { margin-bottom: 18px; }
+            .head {
+              display: flex;
+              justify-content: space-between;
+              align-items: baseline;
+              margin-bottom: 6px;
+            }
+            .label {
+              font-size: 11px;
+              letter-spacing: 0.24em;
+              color: #9d8f7c;
+              font-weight: 800;
+            }
+            .stop {
+              font-size: 26px;
+              font-weight: 900;
+              color: #f4aa41;
+              font-variant-numeric: tabular-nums;
+            }
+            .of { font-size: 12px; color: #9d8f7c; font-weight: 700; }
+            .track {
+              position: relative;
+              height: 8px;
+              background: #0a0806;
+              border: 1px solid #2e261c;
+              border-radius: 999px;
+            }
+            .pip {
+              position: absolute;
+              top: -4px;
+              width: 14px;
+              height: 14px;
+              margin-left: -7px;
+              border-radius: 50%;
+              background: #f4aa41;
+              box-shadow: 0 0 14px rgba(244, 170, 65, 0.8);
+            }
+            .foot {
+              font-size: 11px;
+              color: #9d8f7c;
+              letter-spacing: 0.1em;
+              border-top: 1px solid #2e261c;
+              padding-top: 12px;
+            }
+          </style>
+          <div class="wrap">
+            <div class="title">Reel stops drawn from atmospheric noise</div>
+            ${bars}
+            <div class="foot">
+              ${stops.length} of ${reelCount} reels · ${total} stops per reel · the app maps
+              each stop to whichever symbol occupies it
+            </div>
+          </div>
+        `;
+
+        bru.visualize('html', {
+          name: 'Reel Stops',
+          content: html
+        });
+
+        console.log('Reel stops:', stops.join(', '), '(0-' + maxStop + ')');
+    - type: tests
+      code: |-
+        const text = String(res.getBody() == null ? '' : res.getBody());
+        const numbers = text.match(/-?\d+/g) || [];
+        const stops = numbers.map(Number);
+        const maxStop = Number(bru.getVar('maxStop') || bru.getEnvVar('maxStop') || 63);
+        const reelCount = Number(bru.getVar('reelCount') || bru.getEnvVar('reelCount') || 3);
+
+        test("status is 200", () => {
+          expect(res.getStatus()).to.equal(200);
+        });
+
+        test("body is exactly one number per reel", () => {
+          // Anything else means we are not looking at the plain-integer
+          // response - an error page, say - and the app refuses to guess
+          // which numbers were the reels.
+          expect(numbers).to.have.lengthOf(reelCount);
+        });
+
+        test("every stop is a whole number on the reel strip", () => {
+          stops.forEach((stop, i) => {
+            expect(stop, `reel ${i + 1}`).to.be.a("number");
+            expect(Number.isInteger(stop), `reel ${i + 1} is an integer`).to.equal(true);
+            expect(stop, `reel ${i + 1}`).to.be.at.least(0).and.at.most(maxStop);
+          });
+        });
+
+        test("the response is plain text, not JSON", () => {
+          expect(String(res.getHeader("content-type") || "")).to.include("text/plain");
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+
+settings:
+  encodeUrl: true
+  timeout: 10000
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true
+
+docs: |
+  One spin of the machine: three true random integers, one per reel.
+
+  `random.org` generates randomness from atmospheric noise rather than a
+  software PRNG, needs no API key for this endpoint, and answers in
+  `text/plain` - three lines, nothing else:
+
+  ```
+  54
+  11
+  5
+  ```
+
+  Those three numbers are the three reel positions. Each is an index into a
+  64-stop reel strip, and how many stops a symbol occupies is what sets its
+  odds - exactly how a physical slot machine works.
+
+  **The shape of the machine lives in the environment.** `reelCount` is how
+  many reels there are, and `maxStop` is the last stop on each - so a
+  64-stop reel is `maxStop: 63`. Both are read by the app *and* by this
+  request, which is what keeps them honest: the app re-sends its own
+  numbers at runtime, so the request always asks for exactly as many
+  integers as there are reels, in exactly the range the strip covers.
+
+  ```js
+  bru.ctx.runRequest(spin.pathname, {
+    runtimeVariables: { maxStop: STOPS - 1, reelCount: REELS }
+  })
+  ```
+
+  Change `reelCount` to 5 in the environment and the machine grows two
+  reels, this request starts asking for five integers, and the test below
+  checks for five. Nothing else has to be edited.
+
+  **Quota.** random.org gives each IP a free allowance of true random bits
+  per day (see `Check RNG Quota`). One spin costs a few dozen bits, so a
+  booth cannot realistically run it out - but if it ever did, this request
+  returns HTTP 503 and the app says so rather than quietly making the
+  numbers up itself.

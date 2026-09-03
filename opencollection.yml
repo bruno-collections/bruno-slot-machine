@@ -1,0 +1,117 @@
+opencollection: 1.0.0
+
+info:
+  name: Bruno Slot Machine
+  version: v1.0.0
+
+docs:
+  content: |-
+    # Bruno Slot Machine
+
+    **A booth game where the reels are an HTTP response.** Integers come
+    back from [random.org](https://www.random.org) - real randomness,
+    harvested from atmospheric noise - and those integers *are* the reel
+    positions.
+
+    Two 🐶 out of three reels wins a Bruno t-shirt. It's a live drawing:
+    the winner is standing in front of you, so they just get handed a
+    shirt. No codes, no tickets, nothing to redeem later. A losing spin
+    points them at the swag table anyway, so nobody walks off with nothing.
+
+    Open the **Bruno Slot Machine** app, put it on the booth screen, and
+    let people press SPIN (or hit space, which a presenter clicker sends).
+    No key, no signup, no backend of our own.
+
+    Default environment at the table: **Booth**.
+
+    ## The 60-second version
+
+    | Do this | Say this |
+    |---|---|
+    | Press **SPIN** | "Watch the reels - they keep spinning until the random numbers land." |
+    | Press **SHOW API** | "That's the request that just ran. Every integer mapped to its reel." |
+    | Open `Machine/Spin Reels.yml` in a text editor | "The whole game is a GET request in a YAML file. The app is a file in the same collection." |
+    | Switch the environment to **Booth-Tiered** | "And the machine just reconfigured itself - two prizes now, no code changed." |
+
+    ## Tuning the machine
+
+    **The environment is the control panel.** The app reads it on startup
+    and again whenever it changes, so switching environments - or editing
+    one while the app is open - retunes the game live. Everything falls
+    back to a default, and anything out of range is clamped rather than
+    obeyed, so a typo can't blank the booth screen.
+
+    | Variable | Default | What it does |
+    |---|---|---|
+    | `winRate` | `0.5` | Share of spins that win, 0-1. **The odds dial.** The app builds the reel strip that pays this rate |
+    | `reelCount` | `3` | How many reels, 2-6. Also how many integers `Spin Reels` asks for |
+    | `maxStop` | `63` | Last stop on each reel, so 63 is a 64-stop strip. Longer strips hit `winRate` more precisely |
+    | `winMin` | `2` | How many reels must match to win. Ignored when `prizeTiers` is set |
+    | `prizeName` | `BRUNO T-SHIRT` | What a winner gets |
+    | `prizeTiers` | unset | Several prizes at once: `{"3": "BRUNO HOODIE", "2": "BRUNO T-SHIRT"}` |
+    | `winSymbol` / `missSymbol` | 🐶 / ⚡ | The two symbols. Emoji, or word marks like `200` and `404` |
+    | `eventLabel` | *(banner)* | The attract banner |
+    | `winHint` / `missHint` | *(see Booth)* | The line under a win and under a loss |
+    | `missText` / `nearMissText` | *(see Booth)* | The verdict when they lose, and when they were one reel short |
+    | `winsLabel` | `SHIRTS WON` | Label under the running count of prizes handed out |
+
+    **`winRate` is the only odds control.** Ask for 0.5 and the app searches
+    the reel strip for the stop count that pays closest to it, then shows
+    what it *actually* pays in the SHOW API overlay - so the machine can
+    never advertise a rate it doesn't honour. The rate is nowhere on the
+    player-facing screen.
+
+    Rates are quantised by strip length: on the default 64-stop reel the
+    achievable rates step about a point at a time, so `winRate: 0.1` really
+    pays 10.7%. Raise `maxStop` to 255 for finer control.
+
+    ```bash
+    # try a tuning without touching a file
+    bru run "Machine/Spin Reels.yml" --env Booth --env-var reelCount=5
+    ```
+
+    ### Environments as presets
+
+    | Environment | The machine it builds |
+    |---|---|
+    | **Booth** | The live game: 3 reels, 50/50, one t-shirt |
+    | **Booth-Tiered** | Same odds, two prizes - three 🐶 wins a hoodie, two wins a shirt |
+    | **Rehearsal** | `winRate: 1`, banner says REHEARSAL, and the win line says there's nothing to hand over |
+
+    ## How the reels work
+
+    Real slot machines don't roll a symbol, they roll a **stop** on a
+    physical reel, and how many stops each symbol occupies is what sets the
+    odds. This machine works the same way: a strip of `maxStop + 1` stops
+    split between two symbols, and random.org picks the stop for each reel.
+
+    Two symbols split evenly makes every reel a fair coin, and two-or-more
+    heads out of three lands on 4 of the 8 possible outcomes - which is why
+    the default is a true 50/50 rather than a tuned approximation.
+
+    ## Requests
+
+    | Request | What it does |
+    |---|---|
+    | `Machine/Spin Reels` | The spin. One true random integer per reel. The app runs this and nothing else. |
+    | `Machine/Check RNG Quota` | Booth pre-flight: true random bits left today. Run it before the doors open. |
+
+    ## If the wifi dies
+
+    The spin fails loudly rather than quietly faking it. The error offers
+    **SPIN WITH LOCAL RNG**, which falls back to
+    `crypto.getRandomValues` - and the badge in the footer changes to
+    **LOCAL CRYPTO RNG** for as long as that's what's drawing the reels, so
+    nobody is told random.org picked their shirt when it didn't.
+
+    ## Run it
+
+    ```bash
+    # A spin from the terminal
+    bru run "Machine/Spin Reels.yml" --env Booth
+
+    # Pre-flight before the doors open
+    bru run "Machine" --env Booth
+    ```
+  type: text/markdown
+bundled: false

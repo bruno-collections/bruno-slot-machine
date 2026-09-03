@@ -1,0 +1,66 @@
+name: Booth
+color: "#F4AA41"
+variables:
+  - name: rngBaseUrl
+    value: https://www.random.org
+    description: True randomness from atmospheric noise - no key, no signup
+
+  # ---- the shape of the machine ----
+  - name: reelCount
+    value:
+      type: number
+      data: "3"
+    description: How many reels (2-6). Also how many integers Spin Reels asks for
+  - name: maxStop
+    value:
+      type: number
+      data: "63"
+    description: Last stop on each reel, so 63 means a 64-stop strip. Longer strips = finer odds
+
+  # ---- how often it pays ----
+  - name: winRate
+    value:
+      type: number
+      data: "0.5"
+    description: Share of spins that should win, 0-1. The app builds the reel that pays this - the only odds dial
+  - name: winMin
+    value:
+      type: number
+      data: "2"
+    description: How many reels must show the win symbol. Ignored when prizeTiers is set
+
+  # ---- what it pays ----
+  - name: prizeName
+    value: BRUNO T-SHIRT
+    description: What a winner gets. Shown on the card and on the win screen - update eventLabel to match
+  - name: prizeTiers
+    description: >-
+      Optional. Several prizes at once, richest first, as
+      {"3": "BRUNO HOODIE", "2": "BRUNO T-SHIRT"} - see the Booth-Tiered
+      environment. Leave unset for one prize.
+
+  # ---- what it looks like and says ----
+  - name: winSymbol
+    value: 🐶
+    description: The symbol players are hunting. An emoji, or a word mark like 200 or GET
+  - name: missSymbol
+    value: ⚡
+    description: The other symbol on the reel
+  - name: eventLabel
+    value: SPIN TO WIN A BRUNO T-SHIRT
+    description: The attract banner across the top of the booth screen
+  - name: winHint
+    value: GRAB ONE FROM THE TABLE
+    description: Line under a win - what the winner should do next
+  - name: missHint
+    value: STILL GRAB SOME SWAG FROM THE TABLE!
+    description: Line under a loss - nobody leaves the booth empty-handed
+  - name: missText
+    value: NO LUCK — SPIN AGAIN
+    description: Verdict when no reel came up
+  - name: nearMissText
+    value: SO CLOSE — SPIN AGAIN
+    description: Verdict when they were one reel short
+  - name: winsLabel
+    value: SHIRTS WON
+    description: Label under the running count of prizes handed out

@@ -1,0 +1,8 @@
+.DS_Store
+node_modules/
+*.log
+
+# bru run artefacts
+results.json
+results.xml
+results.html

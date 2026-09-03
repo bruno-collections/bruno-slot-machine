@@ -1,0 +1,30 @@
+name: Rehearsal
+color: "#607D8B"
+variables:
+  - name: rngBaseUrl
+    value: https://www.random.org
+    description: Same true RNG as the booth - practising should exercise the real request
+  - name: reelCount
+    value:
+      type: number
+      data: "3"
+    description: How many reels (2-6)
+  - name: maxStop
+    value:
+      type: number
+      data: "63"
+    description: Last stop on each reel, so 63 means a 64-stop strip
+  - name: winRate
+    value:
+      type: number
+      data: "1"
+    description: Every spin wins, so a rehearsal always exercises the win screen
+  - name: prizeName
+    value: BRUNO T-SHIRT
+    description: What a winner gets
+  - name: eventLabel
+    value: BRUNO SLOT MACHINE — REHEARSAL
+    description: Says REHEARSAL on the banner, so a practice spin is never mistaken for a live win
+  - name: winHint
+    value: REHEARSAL — NOTHING TO HAND OVER
+    description: Line under a win, making it obvious no swag is owed
