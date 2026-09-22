@@ -63,7 +63,10 @@ If you're showing Bruno rather than running a booth, this is the tour:
 | Open `Machine/Log Prize Handout` after a win | "Every prize that goes out posts a JSON receipt, and the tests check the receipt against what we sent." |
 | Run `bru run "Machine" --env Booth` | "Same collection, no app, straight from CI." |
 
-<img width="1135" height="692" alt="image" src="https://github.com/user-attachments/assets/3eacb3d9-542b-455d-b146-f2db5346e034" />
+
+
+https://github.com/user-attachments/assets/53526967-124f-4010-a9dc-ce0d34509e90
+
 
 
 ## Booth-day checklist
