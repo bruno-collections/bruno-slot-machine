@@ -49,9 +49,9 @@ in the app. Add new asset directories there too.
 The collection, folder and request **Docs** tabs are markdown too, so an
 image can go there as well. Relative paths like `images/01-booth-screen.png`
 resolve against the repo, not against Bruno's renderer, so they may well come
-up blank in the app — worth a quick test before relying on it. Once this repo
-is public, the reliable form is the absolute raw URL:
+up blank in the app — worth a quick test before relying on it. The repo is public, so the
+reliable form is the absolute raw URL:
 
 ```markdown
-![Booth screen](https://raw.githubusercontent.com/<org>/<repo>/main/images/01-booth-screen.png)
+![Booth screen](https://raw.githubusercontent.com/bruno-collections/bruno-slot-machine/main/images/01-booth-screen.png)
 ```
