@@ -7,7 +7,7 @@ docs:
   content: |-
     ## Machine
 
-    The two requests behind the booth game, both against
+    The requests behind the booth game. The two that draw the reels go to
     [random.org](https://www.random.org) - true randomness from atmospheric
     noise, no key and no signup.
 
@@ -15,14 +15,21 @@ docs:
     |---|---|---|
     | Spin Reels | GET | One spin: three integers, one per reel |
     | Check RNG Quota | GET | Pre-flight: bits left today |
+    | Log Prize Handout | POST | The paper trail: one line per prize handed over |
 
     `Spin Reels` is the interesting one: `num=3` integers in `[0, maxStop]`,
     returned as `text/plain`, one per line. The app reads those three
     numbers as the three reel stops - there is no client-side dice anywhere
     in the game, which is the whole point of putting it on the booth screen.
 
-    Both run fine on their own from the sidebar; the environment carries a
-    stand-in `maxStop` for what the app supplies at runtime.
+    `Log Prize Handout` is the other half of the collection: the only POST,
+    the only JSON body, and the only response the tests read as an object
+    rather than as text. The app fires it on a win and never on a loss.
+
+    All three run fine on their own from the sidebar, against any
+    environment. `Spin Reels` stands in the reel count and strip length the
+    app would normally send, and `Log Prize Handout` stands in a whole
+    handout, so nothing here needs the app to be open.
 
     ```bash
     bru run "Machine" --env Booth

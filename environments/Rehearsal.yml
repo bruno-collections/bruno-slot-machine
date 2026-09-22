@@ -28,3 +28,5 @@ variables:
   - name: winHint
     value: REHEARSAL — NOTHING TO HAND OVER
     description: Line under a win, making it obvious no swag is owed
+  - name: logUrl
+    description: Deliberately empty. A rehearsal hands nothing over, so there is nothing to log and the app skips it - a practice spin can never land in the real tally

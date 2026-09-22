@@ -1,0 +1,240 @@
+info:
+  name: Log Prize Handout
+  type: http
+  seq: 3
+  tags:
+    - smoke
+
+http:
+  method: POST
+  url: "{{logUrl}}"
+  headers:
+    - name: content-type
+      value: application/json
+      description: The one request in this collection that sends a body
+  body:
+    type: json
+    data: |-
+      {
+        "event": "{{eventLabel}}",
+        "prize": "{{handoutPrize}}",
+        "matched": {{handoutMatched}},
+        "reels": "{{handoutReels}}",
+        "stops": [{{handoutStops}}],
+        "rng": "{{handoutRng}}",
+        "spin": {{handoutSpin}},
+        "at": "{{handoutAt}}"
+      }
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |-
+        // The app sends every handout* value at runtime. Run this request on
+        // its own from the sidebar and there is nothing to send, so fill in a
+        // stand-in handout - the body is always valid JSON either way.
+        function standIn(name, value) {
+          if (!bru.getVar(name)) bru.setVar(name, value);
+        }
+
+        const reelCount = Number(bru.getVar('reelCount') || bru.getEnvVar('reelCount') || 3);
+        const winSymbol = bru.getEnvVar('winSymbol') || '🐶';
+
+        standIn('handoutPrize', bru.getEnvVar('prizeName') || 'BRUNO T-SHIRT');
+        standIn('handoutMatched', reelCount);
+        standIn('handoutReels', new Array(reelCount).fill(winSymbol).join(' '));
+        standIn('handoutStops', new Array(reelCount).fill(0).join(','));
+        standIn('handoutRng', 'stand-in');
+        standIn('handoutSpin', 0);
+        standIn('handoutAt', new Date().toISOString());
+
+        // No log endpoint, nothing to log. Rehearsal leaves logUrl empty on
+        // purpose, so a practice spin can never land in the real tally - and
+        // skipping beats failing, so a folder run under Rehearsal stays green.
+        if (!bru.getEnvVar('logUrl')) {
+          console.log(
+            'No logUrl in this environment, so there is nothing to log - skipping. ' +
+            'Rehearsal leaves it empty on purpose: a practice win is not a real handout.'
+          );
+          bru.runner.skipRequest();
+        }
+    - type: after-response
+      code: |-
+        const receipt = res.getBody() || {};
+
+        // The visualizer renders this HTML without a charset, so a raw UTF-8
+        // emoji comes out as mojibake. Escaping every non-ASCII character to
+        // a numeric reference keeps the markup pure ASCII, which renders the
+        // same however it is decoded - and 'dog' is the whole point here.
+        const esc = (value) => String(value == null ? '—' : value)
+          .replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+          .replace(/[^\x20-\x7E]/gu, (c) => '&#x' + c.codePointAt(0).toString(16) + ';');
+
+        const rows = [
+          ['PRIZE', receipt.prize],
+          ['REELS', receipt.reels],
+          ['MATCHED', receipt.matched],
+          ['STOPS', (receipt.stops || []).map(esc).join(' &middot; ')],
+          ['RNG', receipt.rng],
+          ['SPIN #', receipt.spin],
+          ['AT', receipt.at]
+        ];
+
+        const html = `
+          <style>
+            .r {
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+              background: #17130e; color: #f7f1e7; padding: 22px 24px;
+              border-radius: 14px; max-width: 460px; margin: 0 auto;
+            }
+            .r h1 {
+              font-size: 12px; letter-spacing: 0.28em; color: #9d8f7c;
+              font-weight: 800; text-transform: uppercase; margin: 0 0 16px;
+            }
+            .r .row {
+              display: flex; justify-content: space-between; gap: 16px;
+              padding: 8px 0; border-bottom: 1px dashed #2e261c;
+            }
+            .r .k { font-size: 11px; letter-spacing: 0.2em; color: #9d8f7c; font-weight: 800; }
+            .r .v { font-weight: 800; color: #f4aa41; text-align: right; }
+            .r .foot { font-size: 11px; color: #9d8f7c; letter-spacing: 0.1em; padding-top: 14px; }
+          </style>
+          <div class="r">
+            <h1>Handout logged</h1>
+            ${rows.map(([k, v]) => `
+              <div class="row"><span class="k">${k}</span><span class="v">${k === 'STOPS' ? v : esc(v)}</span></div>
+            `).join('')}
+            <div class="foot">
+              ${res.getStatus()} &middot; ${esc(res.getHeader('content-type') || '')} &middot; the log
+              endpoint mirrored the receipt back
+            </div>
+          </div>
+        `;
+
+        bru.visualize('html', { name: 'Handout Receipt', content: html });
+    - type: tests
+      code: |-
+        const receipt = res.getBody() || {};
+        const reelCount = Number(bru.getVar('reelCount') || bru.getEnvVar('reelCount') || 3);
+
+        test("status is 200", () => {
+          expect(res.getStatus()).to.equal(200);
+        });
+
+        test("the log endpoint answers in JSON", () => {
+          // The other two requests in this collection are text/plain. This
+          // one posts JSON and gets JSON back, so res.getBody() is an object.
+          expect(String(res.getHeader("content-type") || "")).to.include("application/json");
+          expect(receipt).to.be.an("object");
+        });
+
+        test("the receipt names the prize we handed over", () => {
+          // Sent up in the body, read back off the response: if these two
+          // disagree, the tally is not recording what the booth did.
+          expect(receipt.prize).to.equal(String(bru.getVar('handoutPrize')));
+        });
+
+        test("the receipt carries one reel stop per reel", () => {
+          expect(receipt.stops).to.be.an("array").with.lengthOf(reelCount);
+          receipt.stops.forEach((stop, i) => {
+            expect(Number.isInteger(stop), `stop ${i + 1} is an integer`).to.equal(true);
+          });
+        });
+
+        test("the receipt is stamped with a real timestamp", () => {
+          expect(Number.isNaN(Date.parse(receipt.at || '')), `parsed "${receipt.at}"`).to.equal(false);
+        });
+
+        // Chained back into the environment, so the next request - or the next
+        // person poking at the collection - can see what was last handed out.
+        bru.setVar('lastHandoutPrize', receipt.prize);
+        bru.setVar('lastHandoutAt', receipt.at);
+
+        console.log('Logged handout:', receipt.prize, '·', receipt.reels, '·', receipt.at);
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+    - expression: res.body.prize
+      operator: isDefined
+
+settings:
+  encodeUrl: true
+  timeout: 10000
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true
+
+docs: |
+  The booth's paper trail: one POST per prize actually handed over.
+
+  Everything else in this collection is a keyless `GET` that comes back as
+  `text/plain`. This one is the opposite end of Bruno - a **JSON body**, a
+  JSON response, a **pre-request script** that fills in what the caller did
+  not send, and values **chained** out of the response into variables.
+
+  ```json
+  {
+    "event": "SPIN TO WIN A BRUNO T-SHIRT",
+    "prize": "BRUNO T-SHIRT",
+    "matched": 2,
+    "reels": "🐶 🐶 ⚡",
+    "stops": [54, 11, 5],
+    "rng": "random.org",
+    "spin": 37,
+    "at": "2026-09-04T13:05:14.921Z"
+  }
+  ```
+
+  **`logUrl` is where the tally goes.** Out of the box it points at
+  [echo.usebruno.com](https://echo.usebruno.com), which mirrors the payload
+  straight back - so the request is honest about being a stand-in, and the
+  collection still has no backend of its own. Point `logUrl` at your own
+  webhook, sheet or Airtable and the booth starts keeping a real record:
+  one environment variable, no code.
+
+  The tests then check the receipt against what was sent, which is the
+  point of mirroring it back - `prize` has to survive the round trip, and
+  `stops` has to still hold one integer per reel.
+
+  ## Where the values come from
+
+  The app fills the body in at runtime, the same way it sizes `Spin Reels`:
+
+  ```js
+  bru.ctx.runRequest(log.pathname, {
+    runtimeVariables: {
+      handoutPrize: outcome.prize,
+      handoutReels: '🐶 🐶 ⚡',
+      handoutStops: '54,11,5',
+      handoutMatched: 2,
+      handoutRng: 'random.org',
+      handoutSpin: 37
+    }
+  })
+  ```
+
+  Run it from the sidebar instead and the pre-request script stands in a
+  full-house handout for every one of those, so the request always sends
+  valid JSON and the tests always have something to check.
+
+  **Only real handouts get logged.** The app posts this on a win and never
+  on a loss, and it skips logging entirely when `logUrl` is empty - which
+  is exactly what the **Rehearsal** environment does, so practice spins
+  cannot land in the tally.
+
+  Run it under Rehearsal anyway and the pre-request script calls
+  `bru.runner.skipRequest()`, so it is reported as skipped with the reason
+  in the log rather than failing:
+
+  ```text
+  Machine/Log Prize Handout (request skipped via pre-request script)
+  Requests  3 (2 Passed, 1 Skipped)
+  ```
+
+  A rehearsal that has nothing to log is not a broken rehearsal, so
+  `bru run "Machine" --env Rehearsal` still comes back green.
+
+  A failed log never disturbs the booth screen: the winner already has
+  their shirt, and losing the log line is not worth an error dialog in
+  front of a queue.

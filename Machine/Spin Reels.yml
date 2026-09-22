@@ -40,6 +40,20 @@ http:
 
 runtime:
   scripts:
+    - type: before-request
+      code: |-
+        // The app sends its own reelCount and maxStop with every spin. Run
+        // this from the sidebar against an environment that doesn't carry
+        // them - a fresh one for your own event, say - and the URL would go
+        // out with holes in it, which random.org answers with a 503 and no
+        // hint as to why. Stand in the same defaults the app uses instead.
+        const missing = (name) => {
+          const value = bru.getVar(name) != null ? bru.getVar(name) : bru.getEnvVar(name);
+          return value === undefined || value === null || value === '';
+        };
+
+        if (missing('reelCount')) bru.setVar('reelCount', 3);
+        if (missing('maxStop')) bru.setVar('maxStop', 63);
     - type: after-response
       code: |-
         const text = String(res.getBody() == null ? '' : res.getBody());
@@ -130,7 +144,7 @@ runtime:
             <div class="title">Reel stops drawn from atmospheric noise</div>
             ${bars}
             <div class="foot">
-              ${stops.length} of ${reelCount} reels · ${total} stops per reel · the app maps
+              ${stops.length} of ${reelCount} reels &middot; ${total} stops per reel &middot; the app maps
               each stop to whichever symbol occupies it
             </div>
           </div>
@@ -141,6 +155,136 @@ runtime:
           content: html
         });
 
+        // ── CLI-friendly winner outcome ────────────────────────────────────────
+        // A spin is not judged on the numbers themselves. The stops are
+        // positions on a reel strip, and how many stops each symbol occupies
+        // is what sets the odds - so the verdict depends on the strip, which
+        // is built from winRate. The same maths the app runs has to run here,
+        // or the terminal and the booth screen can disagree about one spin.
+        //
+        // On the default strip - 64 stops split evenly - the symbols end up
+        // alternating, so an even stop is a win symbol and an odd one is not.
+        // That is a coincidence of a 50/50 split, not the rule: at any other
+        // winRate the strip is uneven and parity means nothing.
+
+        const eventLabel = String(bru.getEnvVar('eventLabel') || 'SLOT MACHINE');
+        const winSymbol = String(bru.getEnvVar('winSymbol') || '\u{1F436}');
+        const missSymbol = String(bru.getEnvVar('missSymbol') || '\u26A1');
+        const winHint = String(bru.getEnvVar('winHint') || '');
+        const missHint = String(bru.getEnvVar('missHint') || '');
+        const winRate = Number(bru.getEnvVar('winRate') != null ? bru.getEnvVar('winRate') : 0.5);
+        const winMin = Number(bru.getEnvVar('winMin') || 2);
+        const prizeName = String(bru.getEnvVar('prizeName') || 'PRIZE');
+
+        // Chance that at least `min` of `reels` land on a symbol that occupies
+        // share `p` of the strip - every outcome enumerated, no approximation.
+        const chanceOf = (p, min, reels) => {
+          let sum = 0;
+          for (let mask = 0; mask < (1 << reels); mask++) {
+            let hits = 0;
+            let probability = 1;
+            for (let r = 0; r < reels; r++) {
+              if (mask & (1 << r)) { hits++; probability *= p; }
+              else { probability *= 1 - p; }
+            }
+            if (hits >= min) sum += probability;
+          }
+          return sum;
+        };
+
+        // winRate is a target, so find the stop count that pays closest to it.
+        const stopsForRate = (target, strip, min, reels) => {
+          let best = 0;
+          let bestGap = Infinity;
+          for (let w = 0; w <= strip; w++) {
+            const gap = Math.abs(chanceOf(w / strip, min, reels) - target);
+            if (gap < bestGap) { bestGap = gap; best = w; }
+          }
+          return best;
+        };
+
+        // Spread the win stops as evenly as the strip allows, the way a
+        // physical reel is laid out - not all bunched at one end.
+        const buildStrip = (winStops, strip) => {
+          const weights = [winStops, strip - winStops];
+          const credit = [0, 0];
+          const out = [];
+          for (let i = 0; i < strip; i++) {
+            for (let j = 0; j < 2; j++) credit[j] += weights[j];
+            const best = credit[1] > credit[0] ? 1 : 0;
+            out.push(best === 0);
+            credit[best] -= strip;
+          }
+          return out;
+        };
+
+        // Prize tiers, richest first, falling back to the single prize.
+        let tiers = [];
+        const rawTiers = bru.getEnvVar('prizeTiers');
+        let parsedTiers = null;
+        if (rawTiers && typeof rawTiers === 'object') parsedTiers = rawTiers;
+        else if (typeof rawTiers === 'string' && rawTiers.trim()) {
+          try { parsedTiers = JSON.parse(rawTiers); } catch (e) { parsedTiers = null; }
+        }
+        if (parsedTiers) {
+          tiers = Object.keys(parsedTiers)
+            .map((key) => ({ match: Number(key), prize: String(parsedTiers[key] || '').trim() }))
+            .filter((tier) => Number.isInteger(tier.match) && tier.match >= 1 &&
+                              tier.match <= reelCount && tier.prize)
+            .sort((a, b) => b.match - a.match);
+        }
+        if (!tiers.length) tiers = [{ match: winMin, prize: prizeName }];
+
+        // The cheapest tier is what "winning" means, so that is what the rate
+        // has to hit.
+        const threshold = tiers[tiers.length - 1].match;
+        const reelStrip = buildStrip(stopsForRate(winRate, total, threshold, reelCount), total);
+
+        const isWinStop = (stop) => reelStrip[((stop % total) + total) % total];
+        const hits = stops.filter(isWinStop).length;
+        const tier = tiers.find((t) => hits >= t.match) || null;
+        const isWin = !!tier;
+
+        const symbolStrip = stops.map((stop) => (isWinStop(stop) ? winSymbol : missSymbol)).join('  ');
+        const numberStrip = stops.map((s) => String(s).padStart(2, ' ')).join('   ');
+
+        const width = Math.max(48, symbolStrip.length + 12, eventLabel.length + 6);
+        const pad = (s, w) => {
+          const bare = String(s).replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\uFE0F]/gu, '**'); // rough width
+          const spaces = Math.max(0, w - bare.length);
+          const left = Math.floor(spaces / 2);
+          const right = spaces - left;
+          return ' '.repeat(left) + s + ' '.repeat(right);
+        };
+
+        const line = (ch) => ch.repeat(width);
+        const border = (l, m, r) => l + line('\u2500') + r;
+
+        const banner = isWin ? '\u{1F389}  W I N N E R  \u{1F389}' : '\u2014  NO  MATCH  \u2014';
+        const verdict = isWin
+          ? `Prize: ${tier.prize}`
+          : hits === threshold - 1
+            ? 'One reel short'
+            : 'Better luck next spin';
+        const hint = isWin ? winHint : missHint;
+
+        const block = [
+          '',
+          border('\u250C', '', '\u2510'),
+          '\u2502' + pad(eventLabel, width) + '\u2502',
+          border('\u251C', '', '\u2524'),
+          '\u2502' + pad(symbolStrip, width) + '\u2502',
+          '\u2502' + pad(numberStrip, width) + '\u2502',
+          border('\u251C', '', '\u2524'),
+          '\u2502' + pad(banner, width) + '\u2502',
+          '\u2502' + pad(verdict, width) + '\u2502',
+          border('\u2514', '', '\u2518'),
+          hint ? `  ${hint}` : '',
+          `  ${hits} of ${reelCount} ${winSymbol} \u00b7 need ${threshold} \u00b7 ${total} stops \u00b7 winRate ${winRate}`,
+          ''
+        ].filter((l) => l !== '').join('\n');
+
+        console.log(block);
         console.log('Reel stops:', stops.join(', '), '(0-' + maxStop + ')');
     - type: tests
       code: |-
@@ -217,6 +361,10 @@ docs: |
   Change `reelCount` to 5 in the environment and the machine grows two
   reels, this request starts asking for five integers, and the test below
   checks for five. Nothing else has to be edited.
+
+  An environment that carries neither - a fresh one for your own event -
+  still works: the pre-request script stands in the same 3 reels and 64
+  stops the app defaults to, rather than sending a URL with holes in it.
 
   **Quota.** random.org gives each IP a free allowance of true random bits
   per day (see `Check RNG Quota`). One spin costs a few dozen bits, so a

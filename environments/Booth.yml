@@ -36,7 +36,7 @@ variables:
   - name: prizeTiers
     description: >-
       Optional. Several prizes at once, richest first, as
-      {"3": "BRUNO HOODIE", "2": "BRUNO T-SHIRT"} - see the Booth-Tiered
+      {"3": "BRUNO T-SHIRT", "2": "BRUNO STICKER PACK"} - see the Booth-Tiered
       environment. Leave unset for one prize.
 
   # ---- what it looks like and says ----
@@ -64,3 +64,7 @@ variables:
   - name: winsLabel
     value: SHIRTS WON
     description: Label under the running count of prizes handed out
+  # ---- where the tally goes ----
+  - name: logUrl
+    value: https://echo.usebruno.com
+    description: Where Log Prize Handout posts each prize actually handed over. echo.usebruno.com mirrors it back - point this at your own webhook or sheet to keep a real record

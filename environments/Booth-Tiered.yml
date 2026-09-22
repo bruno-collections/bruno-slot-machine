@@ -24,10 +24,10 @@ variables:
       type: object
       data: |-
         {
-          "2": "BRUNO STICKER PACK ",
+          "2": "BRUNO STICKER PACK",
           "3": "BRUNO T-SHIRT"
         }
-    description: "Two prizes from the same spin: all three reels wins the hoodie, two wins the shirt. The cheapest tier is what winRate targets, so the hoodie is simply the rarer half of those wins"
+    description: "Two prizes from the same spin: all three reels wins the t-shirt, two wins the sticker pack. The cheapest tier is what winRate targets, so the t-shirt is simply the rarer half of those wins"
   - name: winSymbol
     value: 🐶
     description: The symbol players are hunting
@@ -46,3 +46,6 @@ variables:
   - name: winsLabel
     value: PRIZES WON
     description: Label under the running count - not everything won here is a shirt
+  - name: logUrl
+    value: https://echo.usebruno.com
+    description: Where Log Prize Handout posts each prize handed over - the receipt records which tier was won

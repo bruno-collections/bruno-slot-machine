@@ -626,6 +626,9 @@ code: |-
        Bruno requests this app drives. Names must match the collection.
        ------------------------------------------------------------------ */
     var REQ_SPIN = 'Spin Reels';
+    var REQ_LOG = 'Log Prize Handout';
+    // Only the spin is required. The prize log is a nice-to-have: delete the
+    // request, or leave logUrl empty, and the booth game still runs.
     var REQUIRED = [REQ_SPIN];
 
     /* ------------------------------------------------------------------
@@ -1324,6 +1327,7 @@ code: |-
           setSpinEnabled(true);
           recordSpin(outcome);
           showOutcome(outcome);
+          if (outcome.win) logHandout(outcome);
           // An environment edited mid-spin is applied now that the reels
           // have stopped, rather than being dropped.
           if (S.reconfigurePending) {
@@ -1427,6 +1431,39 @@ code: |-
       S.ledger = { spins: 0, wins: 0 };
       saveLedger();
       renderLedger();
+    }
+
+    /* ============ prize log ============ */
+
+    /* One POST per prize actually handed over, so the booth ends the day with
+       a record of what went out. Losing spins are not logged - nothing left
+       the table - and neither is anything else in the game.
+
+       Deliberately fire-and-forget: the winner already has their shirt, and a
+       dropped log line is not worth an error dialog in front of a queue. The
+       footer still shows the call, so a failed log is visible without being
+       in the way.
+
+       No logUrl means nowhere to log, which is exactly what the Rehearsal
+       environment does - a practice win cannot reach the real tally. */
+    function logHandout(outcome) {
+      if (!S.req[REQ_LOG]) return;
+      var logUrl = readText(resolvedVars().logUrl, '');
+      if (!logUrl) return;
+
+      var spin = S.lastSpin || {};
+
+      run(REQ_LOG, {
+        handoutPrize: outcome.prize,
+        handoutMatched: outcome.hits,
+        handoutReels: outcome.syms.map(function (s) { return s.glyph; }).join(' '),
+        handoutStops: (spin.stops || []).join(','),
+        handoutRng: spin.rng || 'unknown',
+        handoutSpin: S.ledger.spins,
+        handoutAt: new Date().toISOString()
+      }).then(function (res) {
+        noteApi('POST', logUrl.replace(/^https?:\/\//, ''), res, { raw: textOf(res) });
+      }).catch(function () { /* the shirt is already handed over */ });
     }
 
     /* ============ SHOW API ============ */
@@ -1680,7 +1717,7 @@ code: |-
       loadLedger();
 
       bru.ctx.listRequests().then(function (requests) {
-        [REQ_SPIN].forEach(function (name) {
+        [REQ_SPIN, REQ_LOG].forEach(function (name) {
           var found = requests.filter(function (r) {
             var n = String(r.name || '');
             return n === name || n.replace(/^\d+[-\s]*/, '') === name;
