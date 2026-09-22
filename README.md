@@ -16,7 +16,8 @@ SPIN ── bru.ctx.runRequest() ──> Machine/Spin Reels ──> random.org
                                   "0\n2\n1"  ──> three reel stops
 ```
 
-<!-- screenshot: ![The booth screen, mid-spin](images/01-booth-screen.png) -->
+<img width="1406" height="892" alt="image" src="https://github.com/user-attachments/assets/3cbf9141-dbd7-43b4-b2e8-f387cbc5c229" />
+
 
 ## What you need
 
@@ -41,8 +42,7 @@ git clone <this repo> bruno-slot-machine
 4. Press **SPIN**. Or press space: that's what a wireless presenter clicker
    sends, so the clicker becomes the lever.
 
-<!-- screenshot: ![Bruno's Open Collection dialog](images/02-open-collection.png) -->
-<!-- screenshot: ![The collection in Bruno's sidebar](images/03-app-in-sidebar.png) -->
+<img width="547" height="241" alt="image" src="https://github.com/user-attachments/assets/ce2abbb8-7202-4141-8f15-71298801a2aa" />
 
 Pre-flight from the terminal before the doors open:
 
@@ -63,7 +63,8 @@ If you're showing Bruno rather than running a booth, this is the tour:
 | Open `Machine/Log Prize Handout` after a win | "Every prize that goes out posts a JSON receipt, and the tests check the receipt against what we sent." |
 | Run `bru run "Machine" --env Booth` | "Same collection, no app, straight from CI." |
 
-<!-- screenshot: ![The SHOW API overlay](images/04-show-api.png) -->
+<img width="1135" height="692" alt="image" src="https://github.com/user-attachments/assets/3eacb3d9-542b-455d-b146-f2db5346e034" />
+
 
 ## Booth-day checklist
 
@@ -83,7 +84,8 @@ the app is open — retunes the game live. Everything falls back to a default,
 and anything out of range is clamped rather than obeyed, so a typo can't blank
 the booth screen.
 
-<!-- screenshot: ![The environment selector](images/05-environment-selector.png) -->
+<img width="278" height="293" alt="image" src="https://github.com/user-attachments/assets/5a326107-14c5-47a0-8ec1-0cce8ba7685d" />
+
 
 | Variable | Default | What it does |
 |---|---|---|
@@ -213,7 +215,8 @@ in the footer changes to **LOCAL CRYPTO RNG** for as long as that's what's
 drawing the reels, so nobody is told random.org picked their shirt when it
 didn't.
 
-<!-- screenshot: ![The error card offering local RNG](images/06-rng-error.png) -->
+<img width="684" height="304" alt="image" src="https://github.com/user-attachments/assets/140f930a-8ca0-40f7-878c-3e946d7dbb0c" />
+
 
 random.org meters free use per IP (1,000,000 bits a day, refilled at midnight
 UTC). A spin costs a few dozen bits, so a booth won't run it out — but a
@@ -238,7 +241,8 @@ the stops, which RNG drew them and when:
   "rng": "random.org", "spin": 37, "at": "2026-09-04T13:05:14.921Z" }
 ```
 
-<!-- screenshot: ![The Handout Receipt visualizer](images/07-handout-receipt.png) -->
+<img width="603" height="421" alt="image" src="https://github.com/user-attachments/assets/d69bef57-c18e-4a4d-a187-9c1c42c18037" />
+
 
 `logUrl` decides where that lands. It ships pointing at
 [echo.usebruno.com](https://echo.usebruno.com), which mirrors the payload
